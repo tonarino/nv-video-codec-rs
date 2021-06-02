@@ -57,6 +57,8 @@ fn main() {
         .header("wrapper.h")
         .clang_arg("-IVideo_Codec_SDK_11.0.10/Interface")
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
+        .blocklist_type("_Float64x")
+        .allowlist_type("CU*|NV*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
