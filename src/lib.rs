@@ -1,3 +1,16 @@
+pub extern crate nv_video_codec_sys;
+
+#[macro_use]
+extern crate rustacuda;
+
+#[macro_use]
+extern crate rustacuda_derive;
+extern crate rustacuda_core;
+
+pub mod common;
+pub mod nvdecoder;
+pub mod nvencoder;
+
 #[cfg(test)]
 mod tests {
     #[test]
