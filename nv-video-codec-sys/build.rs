@@ -1,7 +1,7 @@
 extern crate bindgen;
+extern crate cc;
 
-use std::env;
-use std::path::PathBuf;
+use std::{env, fs, path::PathBuf};
 
 static COMMON_CUDA_PATHS: &[&str] = &[
     "/opt/cuda",       // default Arch Linux location
@@ -37,11 +37,38 @@ fn main() {
         println!("cargo:rustc-link-search={}/lib64", p)
     }
 
+    let nvcodec_dir = env::current_dir()
+        .unwrap()
+        .join("Video_Codec_SDK_11.0.10/Samples/NvCodec");
+
+    let build_dir = out_dir().join("build");
+    fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
+
+    cc::Build::new()
+        .cuda(true)
+        .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder/NvDecoder.cpp")
+        .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
+        .include("Video_Codec_SDK_11.0.10/Interface")
+        .flag("-w")
+        .compile("NvDecoder");
+
+    cc::Build::new()
+        .cuda(true)
+        .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder/NvEncoder.cpp")
+        .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
+        .include("Video_Codec_SDK_11.0.10/Interface")
+        .flag("-w")
+        // .flag("-Xcompiler -Wno-missing-field-initializers")
+        .compile("NvEncoder");
+
+    println!("cargo:rerun-if-changed={}", nvcodec_dir.display());
     println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
     println!("cargo:rustc-link-lib=dylib=cuda");
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
     println!("cargo:rustc-link-lib=dylib=nvidia-encode");
+    println!("cargo:rustc-link-lib=dylib=NvDecoder");
+    println!("cargo:rustc-link-lib=dylib=NvEncoder");
 
     if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=dylib=c++");
@@ -56,9 +83,15 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg("-IVideo_Codec_SDK_11.0.10/Interface")
+        .clang_arg("-IVideo_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder")
+        .clang_arg("-IVideo_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder")
+        .clang_arg("-IVideo_Codec_SDK_11.0.10/Samples/Utils")
+        .clang_args(&["-x", "c++"])
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
-        .blocklist_type("_Float64x")
-        .allowlist_type("CU*|NV*")
+        .blocklist_item("std::basic_.*stream_sentry.*")
+        .enable_cxx_namespaces()
+        .respect_cxx_access_specs(true)
+        .allowlist_type("Nv(En|De)coder")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
