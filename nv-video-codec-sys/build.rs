@@ -44,17 +44,19 @@ fn main() {
     let build_dir = out_dir().join("build");
     fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
 
-    cc::Build::new()
+    cxx_build::bridge("src/lib.rs")
         .cuda(true)
         .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder/NvDecoder.cpp")
+        .include(".")
         .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
         .include("Video_Codec_SDK_11.0.10/Interface")
         .flag("-w")
         .compile("NvDecoder");
 
-    cc::Build::new()
+    cxx_build::bridge("src/lib.rs")
         .cuda(true)
         .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder/NvEncoder.cpp")
+        .include(".")
         .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
         .include("Video_Codec_SDK_11.0.10/Interface")
         .flag("-w")
@@ -92,6 +94,7 @@ fn main() {
         .enable_cxx_namespaces()
         .respect_cxx_access_specs(true)
         .allowlist_type("Nv(En|De)coder")
+        .constified_enum_module("cudaVideoCodec_enum.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
