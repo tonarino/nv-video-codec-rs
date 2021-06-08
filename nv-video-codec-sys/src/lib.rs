@@ -4,12 +4,12 @@
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::redundant_static_lifetimes)]
 // broken links from bindgen
-#![allow(rustdoc::broken_intra_doc_links)]
+//#![allow(rustdoc::broken_intra_doc_links)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub use root::{
-    cudaVideoCodec, cudaVideoCodec_enum, CUcontext, Dim, NvDecoder, NvEncoder, Rect, NVENCSTATUS,
+    cudaVideoCodec, cuCtxGetCurrent, cudaVideoCodec_enum, CUcontext, Dim, NvDecoder, NvEncoder, Rect, NVENCSTATUS,
     NV_ENC_BUFFER_FORMAT, NV_ENC_CAPS, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
     NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_RECONFIGURE_PARAMS,
     NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO,
@@ -45,6 +45,25 @@ pub mod ffi {
         // type Dim = crate::root::Dim;
 
         // fn GetContext(self: &NvDecoder) -> UniquePtr<CUcontext>;
-        fn GetWidth(self: &NvDecoder) -> i32;
+        //fn GetWidth(self: &NvDecoder) -> i32;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_destroy_decoder() {
+        unsafe {
+            let mut context: CUcontext = std::ptr::null_mut();
+            cuCtxGetCurrent(&mut context);
+            assert!(!context.is_null());
+
+            let codec = cudaVideoCodec_enum::cudaVideoCodec_HEVC;
+            // Default argument values are dropped.
+            let mut decoder = NvDecoder::new(context, true, codec, true, false, std::ptr::null(), std::ptr::null(), 0, 0, 1000);
+            assert!(decoder.GetWidth() > 0);
+        }
     }
 }

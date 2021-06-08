@@ -103,8 +103,7 @@ public:
     *  @brief  This function is used to get the output frame width.
     *  NV12/P016 output format width is 2 byte aligned because of U and V interleave
     */
-    int GetWidth() { assert(m_nWidth); return (m_eOutputFormat == cudaVideoSurfaceFormat_NV12 || m_eOutputFormat == cudaVideoSurfaceFormat_P016) 
-                                                ? (m_nWidth + 1) & ~1 : m_nWidth; }
+    int GetWidth() const;
 
     /**
     *  @brief  This function is used to get the actual decode width

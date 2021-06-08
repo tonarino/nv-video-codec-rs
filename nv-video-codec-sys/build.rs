@@ -5,7 +5,8 @@ use std::{env, fs, path::PathBuf};
 
 static COMMON_CUDA_PATHS: &[&str] = &[
     "/opt/cuda",       // default Arch Linux location
-    "/usr/local/cuda", // default Ubuntu location
+    "/usr/lib/x86_64-linux-gnu", // default Ubuntu location
+    "/usr/local/cuda",
 ];
 
 fn find_cuda_dir(env_key: &'static str) -> PathBuf {
@@ -41,27 +42,41 @@ fn main() {
         .unwrap()
         .join("Video_Codec_SDK_11.0.10/Samples/NvCodec");
 
+
     let build_dir = out_dir().join("build");
     fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
 
-    cxx_build::bridge("src/lib.rs")
-        .cuda(true)
-        .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder/NvDecoder.cpp")
-        .include(".")
-        .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
-        .include("Video_Codec_SDK_11.0.10/Interface")
-        .flag("-w")
-        .compile("NvDecoder");
+    // TODO(ryo): Refine and document build dependencies.
+    // - libavcodec-dev
+    // - libavformat-dev
+    // - libglew-dev
+    // - freeglut3-dev
+    let sdk_samples_out_dir = cmake::Config::new("Video_Codec_SDK_11.0.10/Samples")
+        .define("CMAKE_C_COMPILER", "gcc-8")
+        .define("CMAKE_CXX_COMPILER", "g++-8")
+        .build();
 
-    cxx_build::bridge("src/lib.rs")
-        .cuda(true)
-        .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder/NvEncoder.cpp")
-        .include(".")
-        .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
-        .include("Video_Codec_SDK_11.0.10/Interface")
-        .flag("-w")
-        // .flag("-Xcompiler -Wno-missing-field-initializers")
-        .compile("NvEncoder");
+    println!("cargo:rustc-link-search=native={}/build/lib", sdk_samples_out_dir.display());
+    println!("cargo:rustc-link-lib=static=NvCodec");
+
+    //cxx_build::bridge("src/lib.rs")
+    //    .cuda(true)
+    //    .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder/NvDecoder.cpp")
+    //    .include(".")
+    //    .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
+    //    .include("Video_Codec_SDK_11.0.10/Interface")
+    //    .flag("-w")
+    //    .compile("NvDecoder");
+
+    //cxx_build::bridge("src/lib.rs")
+    //    .cuda(true)
+    //    .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder/NvEncoder.cpp")
+    //    .include(".")
+    //    .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
+    //    .include("Video_Codec_SDK_11.0.10/Interface")
+    //    .flag("-w")
+    //    // .flag("-Xcompiler -Wno-missing-field-initializers")
+    //    .compile("NvEncoder");
 
     println!("cargo:rerun-if-changed={}", nvcodec_dir.display());
     println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
@@ -69,8 +84,8 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
     println!("cargo:rustc-link-lib=dylib=nvidia-encode");
-    println!("cargo:rustc-link-lib=dylib=NvDecoder");
-    println!("cargo:rustc-link-lib=dylib=NvEncoder");
+    //println!("cargo:rustc-link-lib=dylib=NvDecoder");
+    //println!("cargo:rustc-link-lib=dylib=NvEncoder");
 
     if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=dylib=c++");
@@ -94,6 +109,7 @@ fn main() {
         .enable_cxx_namespaces()
         .respect_cxx_access_specs(true)
         .allowlist_type("Nv(En|De)coder")
+        .allowlist_function("cuCtxGetCurrent")
         .constified_enum_module("cudaVideoCodec_enum.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()

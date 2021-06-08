@@ -724,3 +724,7 @@ void NvDecoder::UnlockFrame(uint8_t **pFrame)
     uint64_t timestamp[2] = {0};
     m_vTimestamp.insert(m_vTimestamp.end(), &timestamp[0], &timestamp[1]);
 }
+
+
+int NvDecoder::GetWidth() const { assert(m_nWidth); return (m_eOutputFormat == cudaVideoSurfaceFormat_NV12 || m_eOutputFormat == cudaVideoSurfaceFormat_P016) 
+					? (m_nWidth + 1) & ~1 : m_nWidth; }

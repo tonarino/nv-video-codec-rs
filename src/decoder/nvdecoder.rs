@@ -28,7 +28,7 @@ impl NvDecoder {
     }
 
     pub fn get_width(&self) -> usize {
-        self.inner.GetWidth() as usize
+        unsafe { self.inner.GetWidth() as usize }
     }
 
     /// Returns the number of frames decoded
