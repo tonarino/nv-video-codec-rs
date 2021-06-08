@@ -80,7 +80,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 
-
 if(WIN32)
     add_subdirectory(AppEncode/AppEncD3D11)
     add_subdirectory(AppEncode/AppEncD3D9)
@@ -89,7 +88,6 @@ else ()
     #Need only linux Makefile for this
     add_subdirectory(AppEncode/AppEncGL)
 endif()
-
 
 add_subdirectory(AppEncode/AppEncCuda)
 add_subdirectory(AppEncode/AppEncDec)
@@ -109,4 +107,5 @@ add_subdirectory(AppDecode/AppDecMem)
 add_subdirectory(AppDecode/AppDecMultiFiles)
 add_subdirectory(AppDecode/AppDecMultiInput)
 add_subdirectory(AppDecode/AppDecPerf)
+
 
