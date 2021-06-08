@@ -11,81 +11,57 @@ cmake_minimum_required(VERSION 3.7)
 
 project(NvCodec)
 
-if(WIN32)
-    set(NV_FFMPEG_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/../External/FFmpeg/include)
-endif()
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(NV_ENC_SOURCES
- ${NV_ENC_DIR}/NvEncoder.cpp
- ${NV_DEC_DIR}/NvDecoder.cpp
- ${NV_ENC_DIR}/NvEncoderCuda.cpp
-)
-
-set(NV_ENC_HDRS
- ${NV_ENC_DIR}/NvEncoder.h
- ${NV_DEC_DIR}/NvDecoder.h
- ${NV_ENC_DIR}/NvEncoderCuda.h
- ${NVCODEC_PUBLIC_INTERFACE_DIR}/nvEncodeAPI.h
- ${NVCODEC_UTILS_DIR}/NvCodecUtils.h
- ${NVCODEC_UTILS_DIR}/NvEncoderCLIOptions.h
- ${NVCODEC_UTILS_DIR}/FFmpegDemuxer.h
-)
-
-set(NV_ENC_CUDA_UTILS
- ${NVCODEC_UTILS_DIR}/BitDepth.cu
-)
-
-source_group( "headers" FILES ${NV_ENC_HDRS} )
-source_group( "sources" FILES ${NV_ENC_SOURCES} ${NV_ENC_CUDA_UTILS})
+set(NVCODEC_PUBLIC_INTERFACE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../Interface)
+set(NVCODEC_UTILS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Utils)
+set(NV_CODEC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(CUDA)
+find_library(CUVID_LIB nvcuvid)
+find_library(NVENCODEAPI_LIB nvidia-encode)
+
+set(NV_CODEC_SOURCES
+  ${NV_CODEC_DIR}/NvEncoder/NvEncoder.cpp
+  ${NV_CODEC_DIR}/NvDecoder/NvDecoder.cpp
+  ${NV_CODEC_DIR}/NvEncoder/NvEncoderCuda.cpp
+  ${NVCODEC_UTILS_DIR}/BitDepth.cu
+)
+
+set(NV_CODEC_HDRS
+  ${NV_CODEC_DIR}/NvEncoder/NvEncoder.h
+  ${NV_CODEC_DIR}/NvDecoder/NvDecoder.h
+  ${NV_CODEC_DIR}/NvEncoder/NvEncoderCuda.h
+  ${NVCODEC_PUBLIC_INTERFACE_DIR}/nvEncodeAPI.h
+  ${NVCODEC_UTILS_DIR}/NvCodecUtils.h
+)
 
 set(CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
-
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-gencode arch=compute_50,code=\"sm_50,compute_50\")
-if ( CMAKE_COMPILER_IS_GNUCC )
-    if(NOT "${CUDA_NVCC_FLAGS}" MATCHES "-std=c\\+\\+11" )
+if (CMAKE_COMPILER_IS_GNUCC)
+    if (NOT "${CUDA_NVCC_FLAGS}" MATCHES "-std=c\\+\\+11" )
         list(APPEND CUDA_NVCC_FLAGS -std=c++11)
     endif()
 endif()
 
-cuda_add_library(${PROJECT_NAME}  ${NV_ENC_SOURCES} ${NV_ENC_CUDA_UTILS} ${NV_ENC_HDRS})
+cuda_add_library(${PROJECT_NAME} ${NV_CODEC_SOURCES} ${NV_CODEC_HDRS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${CUDA_INCLUDE_DIRS}
- ${NVCODEC_PUBLIC_INTERFACE_DIR}
- ${NVCODEC_UTILS_DIR}
- ${NV_CODEC_DIR}
- ${NV_FFMPEG_HDRS}
+target_include_directories(${PROJECT_NAME} PUBLIC
+  ${CUDA_INCLUDE_DIRS}
+  ${NVCODEC_PUBLIC_INTERFACE_DIR}
+  ${NVCODEC_UTILS_DIR}
+  ${NV_CODEC_DIR}
 )
 
-if(WIN32)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        Set(AVCODEC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/x64/avcodec.lib)
-        Set(AVFORMAT_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/x64/avformat.lib)
-        Set(AVUTIL_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/x64/avutil.lib)
-        Set(SWRESAMPLE_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/x64/swresample.lib)
-        Set(FFMPEG_DLL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/x64/)
-     else()
-        Set(AVCODEC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/Win32/avcodec.lib)
-        Set(AVFORMAT_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/Win32/avformat.lib)
-        Set(AVUTIL_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/Win32/avutil.lib)
-        Set(SWRESAMPLE_LIB ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/Win32/swresample.lib)
-        Set(FFMPEG_DLL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../External/FFmpeg/lib/Win32/)
-    endif()
-    #copy dll's
-    install(DIRECTORY ${FFMPEG_DLL_DIR} DESTINATION ${NVCODEC_SAMPLES_INSTALL_DIR} FILES_MATCHING PATTERN "*.dll")
-endif ()
+target_link_libraries(${PROJECT_NAME}
+  ${CUDA_CUDA_LIBRARY}
+  ${CMAKE_DL_LIBS}
+  ${NVENCODEAPI_LIB}
+  ${CUVID_LIB}
+)
 
-target_link_libraries(${PROJECT_NAME} ${CUDA_CUDA_LIBRARY} ${CMAKE_DL_LIBS} ${NVENCODEAPI_LIB} ${CUVID_LIB} ${AVCODEC_LIB}
- ${AVFORMAT_LIB} ${AVUTIL_LIB} ${SWRESAMPLE_LIB})
-
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${NVCODEC_SAMPLES_INSTALL_DIR})
-if (MSVC)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    set_target_properties( ${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${NVCODEC_SAMPLES_INSTALL_DIR}/$<CONFIG>/ )
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD  COMMAND ${CMAKE_COMMAND} -E copy_directory ${FFMPEG_DLL_DIR} ${NVCODEC_SAMPLES_INSTALL_DIR}/$<CONFIG>/)
-    #copy pdb's
-    install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION ${NVCODEC_SAMPLES_INSTALL_DIR}  CONFIGURATIONS Debug)
-endif()
+install(TARGETS ${PROJECT_NAME} ARCHIVE  DESTINATION lib)

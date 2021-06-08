@@ -941,3 +941,23 @@ NVENCSTATUS NvEncoder::DoMotionEstimation(NV_ENC_INPUT_PTR inputBuffer, NV_ENC_I
     
     return nvStatus;
 }
+
+void *NvEncoder::GetDevice() const {
+    return m_pDevice;
+}
+
+NV_ENC_DEVICE_TYPE NvEncoder::GetDeviceType() const {
+    return m_eDeviceType;
+}
+
+int NvEncoder::GetEncodeWidth() const {
+    return m_nWidth;
+}
+
+int NvEncoder::GetEncodeHeight() const {
+    return m_nHeight;
+}
+
+uint32_t NvEncoder::GetEncoderBufferCount() const {
+    return m_nEncoderBuffer;
+}

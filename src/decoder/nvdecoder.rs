@@ -56,10 +56,11 @@ impl NvDecoder {
     }
 }
 
-impl Drop for NvDecoder {
-    fn drop(&mut self) {
-        unsafe {
-            self.inner.destruct();
-        }
-    }
-}
+// FIXME(ryo): This causes double-free error.
+//impl Drop for NvDecoder {
+//    fn drop(&mut self) {
+//        unsafe {
+//            self.inner.destruct();
+//        }
+//    }
+//}

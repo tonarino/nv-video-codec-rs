@@ -109,5 +109,4 @@ add_subdirectory(AppDecode/AppDecMem)
 add_subdirectory(AppDecode/AppDecMultiFiles)
 add_subdirectory(AppDecode/AppDecMultiInput)
 add_subdirectory(AppDecode/AppDecPerf)
-add_subdirectory(NvCodec)
 

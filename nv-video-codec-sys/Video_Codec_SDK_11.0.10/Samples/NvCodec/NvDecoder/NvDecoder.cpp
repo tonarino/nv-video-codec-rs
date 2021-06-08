@@ -725,6 +725,89 @@ void NvDecoder::UnlockFrame(uint8_t **pFrame)
     m_vTimestamp.insert(m_vTimestamp.end(), &timestamp[0], &timestamp[1]);
 }
 
+CUcontext NvDecoder::GetContext() const {
+    return m_cuContext;
+}
 
-int NvDecoder::GetWidth() const { assert(m_nWidth); return (m_eOutputFormat == cudaVideoSurfaceFormat_NV12 || m_eOutputFormat == cudaVideoSurfaceFormat_P016) 
-					? (m_nWidth + 1) & ~1 : m_nWidth; }
+int NvDecoder::GetWidth() const {
+    // assert(m_nWidth);
+    return (m_eOutputFormat == cudaVideoSurfaceFormat_NV12 || m_eOutputFormat == cudaVideoSurfaceFormat_P016) 
+            ? (m_nWidth + 1) & ~1
+	    : m_nWidth;
+}
+
+int NvDecoder::GetDecodeWidth() const {
+    // assert(m_nWidth);
+    return m_nWidth;
+}
+
+int NvDecoder::GetHeight() const {
+    // assert(m_nLumaHeight);
+    return m_nLumaHeight;
+}
+
+int NvDecoder::GetChromaHeight() const {
+    // assert(m_nChromaHeight);
+    return m_nChromaHeight;
+}
+
+int NvDecoder::GetNumChromaPlanes() const {
+    // assert(m_nNumChromaPlanes);
+    return m_nNumChromaPlanes;
+}
+
+int NvDecoder::GetFrameSize() const {
+    // assert(m_nWidth);
+    return GetWidth() * (m_nLumaHeight + (m_nChromaHeight * m_nNumChromaPlanes)) * m_nBPP;
+}
+
+int NvDecoder::GetLumaPlaneSize() const {
+    // assert(m_nWidth);
+    return GetWidth() * m_nLumaHeight * m_nBPP;
+}
+
+int NvDecoder::GetChromaPlaneSize() const {
+    // assert(m_nWidth);
+    return GetWidth() *  (m_nChromaHeight * m_nNumChromaPlanes) * m_nBPP;
+}
+
+int NvDecoder::GetDeviceFramePitch() const {
+    // assert(m_nWidth);
+    return m_nDeviceFramePitch ? (int)m_nDeviceFramePitch : GetWidth() * m_nBPP;
+}
+
+int NvDecoder::GetBitDepth() const {
+    // assert(m_nWidth);
+    return m_nBitDepthMinus8 + 8;
+}
+
+int NvDecoder::GetBPP() const {
+    // assert(m_nWidth);
+    return m_nBPP;
+}
+
+cudaVideoSurfaceFormat NvDecoder::GetOutputFormat() const {
+    return m_eOutputFormat;
+}
+
+CUVIDEOFORMAT NvDecoder::GetVideoFormatInfo() const {
+    // assert(m_nWidth);
+    return m_videoFormat;
+}
+
+std::string NvDecoder::GetVideoInfo() const {
+    return m_videoInfo.str();
+}
+
+void NvDecoder::SetOperatingPoint(const uint32_t opPoint, const bool bDispAllLayers) {
+    m_nOperatingPoint = opPoint;
+    m_bDispAllLayers = bDispAllLayers;
+}
+
+void NvDecoder::startTimer() {
+    m_stDecode_time.Start();
+}
+
+double NvDecoder::stopTimer() {
+    return m_stDecode_time.Stop();
+}

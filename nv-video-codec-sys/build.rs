@@ -38,54 +38,19 @@ fn main() {
         println!("cargo:rustc-link-search={}/lib64", p)
     }
 
-    let nvcodec_dir = env::current_dir()
-        .unwrap()
-        .join("Video_Codec_SDK_11.0.10/Samples/NvCodec");
-
-
-    let build_dir = out_dir().join("build");
-    fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
-
-    // TODO(ryo): Refine and document build dependencies.
-    // - libavcodec-dev
-    // - libavformat-dev
-    // - libglew-dev
-    // - freeglut3-dev
-    let sdk_samples_out_dir = cmake::Config::new("Video_Codec_SDK_11.0.10/Samples")
+    let sdk_samples_out_dir = cmake::Config::new("Video_Codec_SDK_11.0.10/Samples/NvCodec")
         .define("CMAKE_C_COMPILER", "gcc-8")
         .define("CMAKE_CXX_COMPILER", "g++-8")
         .build();
 
-    println!("cargo:rustc-link-search=native={}/build/lib", sdk_samples_out_dir.display());
+    println!("cargo:rustc-link-search=native={}/lib", sdk_samples_out_dir.display());
     println!("cargo:rustc-link-lib=static=NvCodec");
 
-    //cxx_build::bridge("src/lib.rs")
-    //    .cuda(true)
-    //    .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvDecoder/NvDecoder.cpp")
-    //    .include(".")
-    //    .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
-    //    .include("Video_Codec_SDK_11.0.10/Interface")
-    //    .flag("-w")
-    //    .compile("NvDecoder");
-
-    //cxx_build::bridge("src/lib.rs")
-    //    .cuda(true)
-    //    .file("Video_Codec_SDK_11.0.10/Samples/NvCodec/NvEncoder/NvEncoder.cpp")
-    //    .include(".")
-    //    .include("Video_Codec_SDK_11.0.10/Samples/NvCodec")
-    //    .include("Video_Codec_SDK_11.0.10/Interface")
-    //    .flag("-w")
-    //    // .flag("-Xcompiler -Wno-missing-field-initializers")
-    //    .compile("NvEncoder");
-
-    println!("cargo:rerun-if-changed={}", nvcodec_dir.display());
     println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
     println!("cargo:rustc-link-lib=dylib=cuda");
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
     println!("cargo:rustc-link-lib=dylib=nvidia-encode");
-    //println!("cargo:rustc-link-lib=dylib=NvDecoder");
-    //println!("cargo:rustc-link-lib=dylib=NvEncoder");
 
     if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=dylib=c++");
@@ -93,9 +58,6 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=stdc++");
         println!("cargo:rustc-link-lib=dylib=gcc");
     }
-
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=wrapper.h");
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
@@ -109,7 +71,6 @@ fn main() {
         .enable_cxx_namespaces()
         .respect_cxx_access_specs(true)
         .allowlist_type("Nv(En|De)coder")
-        .allowlist_function("cuCtxGetCurrent")
         .constified_enum_module("cudaVideoCodec_enum.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()

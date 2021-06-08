@@ -144,24 +144,24 @@ public:
     /**
     *  @brief  This function is used to get the current device on which encoder is running.
     */
-    void *GetDevice() const { return m_pDevice; }
+    void *GetDevice() const;
 
     /**
     *  @brief  This function is used to get the current device type which encoder is running.
     */
-    NV_ENC_DEVICE_TYPE GetDeviceType() const { return m_eDeviceType; }
+    NV_ENC_DEVICE_TYPE GetDeviceType() const;
 
     /**
     *  @brief  This function is used to get the current encode width.
     *  The encode width can be modified by Reconfigure() function.
     */
-    int GetEncodeWidth() const { return m_nWidth; }
+    int GetEncodeWidth() const;
 
     /**
     *  @brief  This function is used to get the current encode height.
     *  The encode height can be modified by Reconfigure() function.
     */
-    int GetEncodeHeight() const { return m_nHeight; }
+    int GetEncodeHeight() const;
 
     /**
     *   @brief  This function is used to get the current frame size based on pixel format.
@@ -252,7 +252,7 @@ public:
     /**
     *  @brief This function returns the number of allocated buffers.
     */
-    uint32_t GetEncoderBufferCount() const { return m_nEncoderBuffer; }
+    uint32_t GetEncoderBufferCount() const;
 protected:
 
     /**

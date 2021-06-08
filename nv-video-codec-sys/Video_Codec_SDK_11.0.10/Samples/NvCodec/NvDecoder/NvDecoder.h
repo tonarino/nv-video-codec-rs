@@ -97,7 +97,7 @@ public:
     /**
     *  @brief  This function is used to get the current CUDA context.
     */
-    CUcontext GetContext() { return m_cuContext; }
+    CUcontext GetContext() const;
 
     /**
     *  @brief  This function is used to get the output frame width.
@@ -108,62 +108,62 @@ public:
     /**
     *  @brief  This function is used to get the actual decode width
     */
-    int GetDecodeWidth() { assert(m_nWidth); return m_nWidth; }
+    int GetDecodeWidth() const;
 
     /**
     *  @brief  This function is used to get the output frame height (Luma height).
     */
-    int GetHeight() { assert(m_nLumaHeight); return m_nLumaHeight; }
+    int GetHeight() const;
 
     /**
     *  @brief  This function is used to get the current chroma height.
     */
-    int GetChromaHeight() { assert(m_nChromaHeight); return m_nChromaHeight; }
+    int GetChromaHeight() const;
 
     /**
     *  @brief  This function is used to get the number of chroma planes.
     */
-    int GetNumChromaPlanes() { assert(m_nNumChromaPlanes); return m_nNumChromaPlanes; }
+    int GetNumChromaPlanes() const;
     
     /**
     *   @brief  This function is used to get the current frame size based on pixel format.
     */
-    int GetFrameSize() { assert(m_nWidth); return GetWidth() * (m_nLumaHeight + (m_nChromaHeight * m_nNumChromaPlanes)) * m_nBPP; }
+    int GetFrameSize() const;
 
     /**
     *   @brief  This function is used to get the current frame Luma plane size.
     */
-    int GetLumaPlaneSize() { assert(m_nWidth); return GetWidth() * m_nLumaHeight * m_nBPP; }
+    int GetLumaPlaneSize() const;
 
     /**
     *   @brief  This function is used to get the current frame chroma plane size.
     */
-    int GetChromaPlaneSize() { assert(m_nWidth); return GetWidth() *  (m_nChromaHeight * m_nNumChromaPlanes) * m_nBPP; }
+    int GetChromaPlaneSize() const;
 
     /**
     *  @brief  This function is used to get the pitch of the device buffer holding the decoded frame.
     */
-    int GetDeviceFramePitch() { assert(m_nWidth); return m_nDeviceFramePitch ? (int)m_nDeviceFramePitch : GetWidth() * m_nBPP; }
+    int GetDeviceFramePitch() const;
 
     /**
     *   @brief  This function is used to get the bit depth associated with the pixel format.
     */
-    int GetBitDepth() { assert(m_nWidth); return m_nBitDepthMinus8 + 8; }
+    int GetBitDepth() const;
 
     /**
     *   @brief  This function is used to get the bytes used per pixel.
     */
-    int GetBPP() { assert(m_nWidth); return m_nBPP; }
+    int GetBPP() const;
 
     /**
     *   @brief  This function is used to get the YUV chroma format
     */
-    cudaVideoSurfaceFormat GetOutputFormat() { return m_eOutputFormat; }
+    cudaVideoSurfaceFormat GetOutputFormat() const;
 
     /**
     *   @brief  This function is used to get information about the video stream (codec, display parameters etc)
     */
-    CUVIDEOFORMAT GetVideoFormatInfo() { assert(m_nWidth); return m_videoFormat; }
+    CUVIDEOFORMAT GetVideoFormatInfo() const;
 
     /**
     *   @brief  This function is used to get codec string from codec id
@@ -173,7 +173,7 @@ public:
     /**
     *   @brief  This function is used to print information about the video stream
     */
-    std::string GetVideoInfo() const { return m_videoInfo.str(); }
+    std::string GetVideoInfo() const;
 
     /**
     *   @brief  This function decodes a frame and returns the number of frames that are available for
@@ -219,13 +219,13 @@ public:
     *   @param  opPoint - operating point of an AV1 scalable bitstream
     *   @param  bDispAllLayers - Output all decoded frames of an AV1 scalable bitstream
     */
-    void SetOperatingPoint(const uint32_t opPoint, const bool bDispAllLayers) { m_nOperatingPoint = opPoint; m_bDispAllLayers = bDispAllLayers; }
+    void SetOperatingPoint(const uint32_t opPoint, const bool bDispAllLayers);
 
     // start a timer
-    void   startTimer() { m_stDecode_time.Start(); }
+    void   startTimer();
 
     // stop the timer
-    double stopTimer() { return m_stDecode_time.Stop(); }
+    double stopTimer();
 private:
     /**
     *   @brief  Callback function to be registered for getting a callback when decoding of sequence starts
