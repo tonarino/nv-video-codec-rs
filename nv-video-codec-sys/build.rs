@@ -1,10 +1,7 @@
-extern crate bindgen;
-extern crate cc;
-
-use std::{env, fs, path::PathBuf};
+use std::{env, path::PathBuf};
 
 static COMMON_CUDA_PATHS: &[&str] = &[
-    "/opt/cuda",       // default Arch Linux location
+    "/opt/cuda",                 // default Arch Linux location
     "/usr/lib/x86_64-linux-gnu", // default Ubuntu location
     "/usr/local/cuda",
 ];
@@ -43,7 +40,10 @@ fn main() {
         .define("CMAKE_CXX_COMPILER", "g++-8")
         .build();
 
-    println!("cargo:rustc-link-search=native={}/lib", sdk_samples_out_dir.display());
+    println!(
+        "cargo:rustc-link-search=native={}/lib",
+        sdk_samples_out_dir.display()
+    );
     println!("cargo:rustc-link-lib=static=NvCodec");
 
     println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
