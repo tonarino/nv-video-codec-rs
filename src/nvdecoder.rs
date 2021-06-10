@@ -1,9 +1,7 @@
-use nv_video_codec_sys as sys;
+use nv_video_codec_sys;
 
 pub struct Frame {}
-pub struct NvDecoder {
-    inner: sys::NvDecoder,
-}
+pub struct NvDecoder {}
 
 impl NvDecoder {
     pub fn new() -> Self {
