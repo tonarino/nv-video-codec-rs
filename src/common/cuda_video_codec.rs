@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub enum CudaVideoCodec {
     MPEG1,
     MPEG2,
