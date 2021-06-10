@@ -67,6 +67,7 @@ fn main() {
         .clang_args(&["-x", "c++"])
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
         .constified_enum_module("cudaVideoCodec_enum")
+        .rustified_enum(".*")
         .allowlist_type("(.*cu.*|.*CU.*|.*NV.*)")
         .allowlist_function("(.*cu.*|.*CU.*|.*NV.*)")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
