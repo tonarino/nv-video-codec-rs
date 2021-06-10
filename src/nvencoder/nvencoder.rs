@@ -26,33 +26,57 @@ pub enum Error {
     ResourceNotMapped,
 }
 
+#[repr(C)]
+struct EncoderHandle {
+    _data: [u8; 0],
+    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+}
+
+#[repr(C)]
+struct CompletionEvent {
+    _data: [u8; 0],
+    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+}
+
+#[repr(C)]
+struct Device {
+    _data: [u8; 0],
+    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+}
+
+#[repr(C)]
+struct Input {
+    _data: [u8; 0],
+    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+}
+
 pub struct NvEncoder {
     motion_estimation_only: bool,
     output_in_video_memory: bool,
-    // encoder_handler: *mut void,
-    // nv_encode_api_function_list: NV_ENCODE_API_FUNCTION_LIST,
+    encoder_handle: *mut EncoderHandle, // Originally a void pointer
+    nv_encode_api_function_list: NV_ENCODE_API_FUNCTION_LIST,
     input_frames: Vec<NvEncInputFrame>,
-    // registered_resources: Vec<NV_ENC_REGISTERED_PTR>,
+    registered_resources: Vec<NV_ENC_REGISTERED_PTR>,
     reference_frames: Vec<NvEncInputFrame>,
-    // registered_resources_for_reference: Vec<NV_ENC_REGISTERED_PTR>,
-    // mapped_input_buffers: Vec<NV_ENC_INPUT_PTR>,
-    // mapped_ref_buffers: Vec<NV_ENC_INPUT_PTR>,
-    // completion_event: Vec<*mut void>,
+    registered_resources_for_reference: Vec<NV_ENC_REGISTERED_PTR>,
+    mapped_input_buffers: Vec<NV_ENC_INPUT_PTR>,
+    mapped_ref_buffers: Vec<NV_ENC_INPUT_PTR>,
+    completion_event: Vec<*mut CompletionEvent>, // Originally a void pointer
     to_send: i32,
     got: i32,
     encoder_buffer: i32,
     output_delay: i32,
     width: u32,
     height: u32,
-    // buffer_format: NV_ENC_BUFFER_FORMAT,
-    // device: *mut void,
-    // device_type: NV_ENC_DEVICE_TYPE,
-    // initialize_params: NV_ENC_INITIALIZE_PARAMS,
-    // encode_config: NV_ENC_CONFIG,
+    buffer_format: NV_ENC_BUFFER_FORMAT,
+    device: *mut Device, // Originally a void pointer
+    device_type: NV_ENC_DEVICE_TYPE,
+    initialize_params: NV_ENC_INITIALIZE_PARAMS,
+    encode_config: NV_ENC_CONFIG,
     encoder_initialized: bool,
     extra_output_delay: u32,
-    // bitstream_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
-    // motion_vector_data_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
+    bitstream_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
+    motion_vector_data_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
     max_encode_width: u32,
     max_encode_height: u32,
 }
@@ -256,11 +280,11 @@ impl Drop for NvEncoder {
 }
 
 struct NvEncInputFrame {
-    // input_ptr: *mut void,
+    input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],
     num_chroma_planes: u32,
     pitch: u32,
     chroma_pitch: u32,
-    // buffer_format: NV_ENC_BUFFER_FORMAT,
-    // resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+    buffer_format: NV_ENC_BUFFER_FORMAT,
+    resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
 }
