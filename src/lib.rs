@@ -7,6 +7,7 @@ extern crate rustacuda;
 extern crate rustacuda_derive;
 extern crate rustacuda_core;
 
+#[macro_use]
 pub mod common;
 pub mod nvdecoder;
 pub mod nvencoder;
