@@ -5,13 +5,12 @@ use nv_video_codec_sys::{
     NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
 };
 
-const NVENCAPI_VERSION: u32 = NVENCAPI_MAJOR_VERSION | (NVENCAPI_MINOR_VERSION << 24);
-
 const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
 }
 
 const NV_ENCODE_API_FUNCTION_LIST_VERSION: u32 = nvenc_api_struct_version(2);
+const NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER: u32 = nvenc_api_struct_version(1);
 
 pub enum Error {
     NoEncodeDevice,
@@ -134,8 +133,71 @@ pub struct NvEncoder {
 }
 
 impl NvEncoder {
-    pub fn new() -> Self {
-        Self::load_nv_enc_api();
+    pub fn new(
+        device_type: NV_ENC_DEVICE_TYPE,
+        device: *mut Device,
+        width: u32,
+        height: u32,
+        buffer_format: NV_ENC_BUFFER_FORMAT,
+        extra_output_delay: u32,
+        motion_estimation_only: bool,
+        output_in_video_memory: bool,
+    ) -> Result<Self, Error> {
+        let enc_api = Self::load_nv_enc_api();
+
+        if enc_api.nvEncOpenEncodeSession.is_none() {
+            return Err(Error::NoEncodeDevice);
+        }
+
+        let mut encode_session_ex_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
+            version: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER,
+            device,
+            deviceType: device_type,
+            apiVersion: NVENCAPI_VERSION,
+            ..NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default()
+        };
+
+        let mut encoder_handle = std::ptr::null_mut();
+
+        enc_api
+            .nvEncOpenEncodeSession
+            .unwrap()
+            .nvEncOpenEncodeSessionEx(
+                &mut encode_session_ex_params as *mut _,
+                &mut encoder_handle as *mut _,
+            )
+            .into_result()?;
+
+        Ok(Self {
+            motion_estimation_only,
+            output_in_video_memory,
+            encoder_handle,
+            nv_encode_api_function_list: enc_api,
+            input_frames: Vec::new(),
+            registered_resources: Vec::new(),
+            reference_frames: Vec::new(),
+            registered_resources_for_reference: Vec::new(),
+            mapped_input_buffers: Vec::new(),
+            mapped_ref_buffers: Vec::new(),
+            completion_event: Vec::new(),
+            to_send: 0,
+            got: 0,
+            encoder_buffer: 0,
+            output_delay: 0,
+            width,
+            height,
+            buffer_format,
+            device,
+            device_type,
+            initialize_params: NV_ENC_INITIALIZE_PARAMS::default(),
+            encode_config: NV_ENC_CONFIG::default(),
+            encoder_initialized: false,
+            extra_output_delay: 0,
+            bitstream_output_buffer: Vec::new(),
+            motion_vector_data_output_buffer: Vec::new(),
+            max_encode_width: width,
+            max_encode_height: height,
+        })
     }
 
     pub fn create_encoder() {
