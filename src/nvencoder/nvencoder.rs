@@ -281,7 +281,7 @@ impl NvEncoder {
             NvEncodeAPICreateInstance(nvenc_api.as_mut_ptr()).into_result()?;
         }
 
-        Ok(nvenc_api.assume_init());
+        Ok(nvenc_api.assume_init())
     }
 
     fn get_encoded_packet() {
