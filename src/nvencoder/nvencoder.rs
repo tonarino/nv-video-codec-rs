@@ -1,8 +1,8 @@
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, NVENCAPI_MAJOR_VERSION,
-    NVENCAPI_MINOR_VERSION, NVENCSTATUS, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_FORMAT,
-    NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
+    NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENCSTATUS, NV_ENCODE_API_FUNCTION_LIST,
+    NV_ENC_BUFFER_FORMAT, NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS,
+    NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
 };
 
 const fn nvenc_api_struct_version(version: u32) -> u32 {
@@ -89,8 +89,9 @@ struct CompletionEvent {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
+// TODO(bschwind) - Obtain this device pointer internally, with a call to cuCtxGetCurrent()
 #[repr(C)]
-struct Device {
+pub struct Device {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
@@ -143,7 +144,7 @@ impl NvEncoder {
         motion_estimation_only: bool,
         output_in_video_memory: bool,
     ) -> Result<Self, Error> {
-        let enc_api = Self::load_nv_enc_api();
+        let enc_api = Self::load_nv_enc_api()?;
 
         if enc_api.nvEncOpenEncodeSession.is_none() {
             return Err(Error::NoEncodeDevice);
@@ -151,22 +152,22 @@ impl NvEncoder {
 
         let mut encode_session_ex_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
             version: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER,
-            device,
+            device: device as *mut std::os::raw::c_void,
             deviceType: device_type,
             apiVersion: NVENCAPI_VERSION,
             ..NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default()
         };
 
-        let mut encoder_handle = std::ptr::null_mut();
+        let mut encoder_handle: *mut EncoderHandle = std::ptr::null_mut();
+        let encoder_handle_ptr: *mut *mut EncoderHandle = unsafe { &mut encoder_handle };
 
-        enc_api
-            .nvEncOpenEncodeSession
-            .unwrap()
-            .nvEncOpenEncodeSessionEx(
+        unsafe {
+            enc_api.nvEncOpenEncodeSessionEx.unwrap()(
                 &mut encode_session_ex_params as *mut _,
-                &mut encoder_handle as *mut _,
+                encoder_handle_ptr as *mut _,
             )
             .into_result()?;
+        }
 
         Ok(Self {
             motion_estimation_only,
