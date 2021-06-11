@@ -1,3 +1,18 @@
+use nv_video_codec_sys::{
+    NvEncodeAPIGetMaxSupportedVersion, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCSTATUS,
+    NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_FORMAT, NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE,
+    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR,
+    NV_ENC_REGISTERED_PTR,
+};
+
+const NVENCAPI_VERSION: u32 = NVENCAPI_MAJOR_VERSION | (NVENCAPI_MINOR_VERSION << 24);
+
+const fn nvenc_api_struct_version(version: u32) -> u32 {
+    NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
+}
+
+const NV_ENCODE_API_FUNCTION_LIST_VERSION: u32 = nvenc_api_struct_version(2);
+
 pub enum Error {
     NoEncodeDevice,
     UnsupportedDevice,
@@ -24,6 +39,43 @@ pub enum Error {
     ResourceRegisterFailed,
     ResourceNotRegistered,
     ResourceNotMapped,
+}
+
+trait IntoResult {
+    fn into_result(self) -> Result<(), Error>;
+}
+
+impl IntoResult for NVENCSTATUS {
+    fn into_result(self) -> Result<(), Error> {
+        match self {
+            NVENCSTATUS::NV_ENC_SUCCESS => Ok(()),
+            NVENCSTATUS::NV_ENC_ERR_NO_ENCODE_DEVICE => Err(Error::NoEncodeDevice),
+            NVENCSTATUS::NV_ENC_ERR_UNSUPPORTED_DEVICE => Err(Error::UnsupportedDevice),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_ENCODERDEVICE => Err(Error::InvalidEncoderDevice),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_DEVICE => Err(Error::InalidDevice),
+            NVENCSTATUS::NV_ENC_ERR_DEVICE_NOT_EXIST => Err(Error::DeviceNoLongerExists),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_PTR => Err(Error::InvalidPointer),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_EVENT => Err(Error::InvalidEvent),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_PARAM => Err(Error::InvalidParam),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_CALL => Err(Error::InvalidCall),
+            NVENCSTATUS::NV_ENC_ERR_OUT_OF_MEMORY => Err(Error::OutOfMemory),
+            NVENCSTATUS::NV_ENC_ERR_ENCODER_NOT_INITIALIZED => Err(Error::EncoderNotInitialized),
+            NVENCSTATUS::NV_ENC_ERR_UNSUPPORTED_PARAM => Err(Error::UnsupportedParam),
+            NVENCSTATUS::NV_ENC_ERR_LOCK_BUSY => Err(Error::LockBusy),
+            NVENCSTATUS::NV_ENC_ERR_NOT_ENOUGH_BUFFER => Err(Error::NotEnoughBuffer),
+            NVENCSTATUS::NV_ENC_ERR_INVALID_VERSION => Err(Error::InvalidVersion),
+            NVENCSTATUS::NV_ENC_ERR_MAP_FAILED => Err(Error::MapFailed),
+            NVENCSTATUS::NV_ENC_ERR_NEED_MORE_INPUT => Err(Error::NeedMoreInput),
+            NVENCSTATUS::NV_ENC_ERR_ENCODER_BUSY => Err(Error::EncoderBusy),
+            NVENCSTATUS::NV_ENC_ERR_EVENT_NOT_REGISTERD => Err(Error::EventNotRegistered),
+            NVENCSTATUS::NV_ENC_ERR_GENERIC => Err(Error::ErrGeneric),
+            NVENCSTATUS::NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY => Err(Error::IncompatibleClientKey),
+            NVENCSTATUS::NV_ENC_ERR_UNIMPLEMENTED => Err(Error::Unimplemented),
+            NVENCSTATUS::NV_ENC_ERR_RESOURCE_REGISTER_FAILED => Err(Error::ResourceRegisterFailed),
+            NVENCSTATUS::NV_ENC_ERR_RESOURCE_NOT_REGISTERED => Err(Error::ResourceNotRegistered),
+            NVENCSTATUS::NV_ENC_ERR_RESOURCE_NOT_MAPPED => Err(Error::ResourceNotMapped),
+        }
+    }
 }
 
 #[repr(C)]
@@ -211,8 +263,25 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn load_nv_enc_api() -> NV_ENCODE_API_FUNCTION_LIST {
-        unimplemented!()
+    fn load_nv_enc_api() -> Result<NV_ENCODE_API_FUNCTION_LIST, Error> {
+        let version = 0u32;
+        let current_version = (NVENCAPI_MAJOR_VERSION << 4) | NVENCAPI_MINOR_VERSION;
+        unsafe {
+            NvEncodeAPIGetMaxSupportedVersion(&mut version as *mut _).into_result()?;
+        }
+
+        if current_version > version {
+            return Err(Error::InvalidVersion);
+        }
+
+        let mut nvenc_api = MaybeUninit::<NV_ENCODE_API_FUNCTION_LIST>::uninit();
+        nvenc_api.as_mut_ptr().write(NV_ENCODE_API_FUNCTION_LIST_VERSION);
+
+        unsafe {
+            NvEncodeAPICreateInstance(nvenc_api.as_mut_ptr()).into_result()?;
+        }
+
+        Ok(nvenc_api.assume_init());
     }
 
     fn get_encoded_packet() {
