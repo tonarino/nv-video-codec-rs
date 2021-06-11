@@ -4,7 +4,6 @@ use nv_video_codec_sys::{
     NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
     NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
 };
-use std::mem::MaybeUninit;
 
 const NVENCAPI_VERSION: u32 = NVENCAPI_MAJOR_VERSION | (NVENCAPI_MINOR_VERSION << 24);
 
@@ -265,7 +264,7 @@ impl NvEncoder {
     }
 
     fn load_nv_enc_api() -> Result<NV_ENCODE_API_FUNCTION_LIST, Error> {
-        let version = 0u32;
+        let mut version = 0u32;
         let current_version = (NVENCAPI_MAJOR_VERSION << 4) | NVENCAPI_MINOR_VERSION;
         unsafe {
             NvEncodeAPIGetMaxSupportedVersion(&mut version as *mut _).into_result()?;
@@ -275,14 +274,16 @@ impl NvEncoder {
             return Err(Error::InvalidVersion);
         }
 
-        let mut nvenc_api = MaybeUninit::<NV_ENCODE_API_FUNCTION_LIST>::uninit();
-        nvenc_api.as_mut_ptr().write(NV_ENCODE_API_FUNCTION_LIST_VERSION);
+        let mut nvenc_api = NV_ENCODE_API_FUNCTION_LIST {
+            version: NV_ENCODE_API_FUNCTION_LIST_VERSION,
+            ..NV_ENCODE_API_FUNCTION_LIST::default()
+        };
 
         unsafe {
-            NvEncodeAPICreateInstance(nvenc_api.as_mut_ptr()).into_result()?;
+            NvEncodeAPICreateInstance(&mut nvenc_api as *mut _).into_result()?;
         }
 
-        Ok(nvenc_api.assume_init())
+        Ok(nvenc_api)
     }
 
     fn get_encoded_packet() {
