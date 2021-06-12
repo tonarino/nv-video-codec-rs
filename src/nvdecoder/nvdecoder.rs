@@ -24,6 +24,20 @@ pub struct NvDecoderBuilder {
 }
 
 impl NvDecoderBuilder {
+    builder_field_setter!(low_latency: bool);
+
+    builder_field_setter!(device_frame_pitched: bool);
+
+    builder_field_setter_opt!(crop_rect: Rect);
+
+    builder_field_setter_opt!(resize_dim: Dim);
+
+    builder_field_setter!(max_width: u32);
+
+    builder_field_setter!(max_height: u32);
+
+    builder_field_setter!(clock_rate: u32);
+
     pub fn new(context: Context, use_device_frame: bool, codec: CudaVideoCodec) -> Self {
         Self {
             context,
@@ -38,14 +52,6 @@ impl NvDecoderBuilder {
             clock_rate: 1000,
         }
     }
-
-    builder_field_setter!(low_latency: bool);
-    builder_field_setter!(device_frame_pitched: bool);
-    builder_field_setter_opt!(crop_rect: Rect);
-    builder_field_setter_opt!(resize_dim: Dim);
-    builder_field_setter!(max_width: u32);
-    builder_field_setter!(max_height: u32);
-    builder_field_setter!(clock_rate: u32);
 
     pub fn build(self) -> Result<NvDecoder, NvDecoderError> {
         NvDecoder::new(
@@ -188,15 +194,13 @@ impl Drop for NvDecoder {
         if !self.parser.is_null() {
             unsafe {
                 let err = cuvidDestroyVideoParser(self.parser as nv_video_codec_sys::CUvideoparser);
-                err.into_cuda_result()
-                    .expect("Failure on nvdecoder parser destroy");
+                err.into_cuda_result().expect("Failure on nvdecoder parser destroy");
             }
         }
 
         unsafe {
             let err = cuvidCtxLockDestroy(self.ctx_lock as nv_video_codec_sys::CUvideoctxlock);
-            err.into_cuda_result()
-                .expect("Failure on nvdecoder ctx lock destroy");
+            err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");
         }
     }
 }
