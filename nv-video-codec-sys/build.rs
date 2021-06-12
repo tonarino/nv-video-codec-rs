@@ -25,25 +25,19 @@ fn find_cuda_dir(env_key: &'static str) -> PathBuf {
 }
 
 fn out_dir() -> PathBuf {
-    std::env::var("OUT_DIR")
-        .expect("OUT_DIR environment var not set.")
-        .into()
+    std::env::var("OUT_DIR").expect("OUT_DIR environment var not set.").into()
 }
 
 fn main() {
     let cuda_include = find_cuda_dir("CUDA_INCLUDE_PATH").join("include");
     for p in COMMON_CUDA_PATHS {
-        println!("cargo:rustc-link-search={}/lib64", p)
+        println!("cargo:rustc-link-search={}/lib64", p);
+        println!("cargo:rustc-link-search={}/lib64/stubs", p);
     }
-
-    let nvcodec_dir = env::current_dir()
-        .unwrap()
-        .join("Video_Codec_SDK_11.0.10/Samples/NvCodec");
 
     let build_dir = out_dir().join("build");
     fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
 
-    println!("cargo:rerun-if-changed={}", nvcodec_dir.display());
     println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
     println!("cargo:rustc-link-lib=dylib=cuda");
     println!("cargo:rustc-link-lib=dylib=cudart");
@@ -78,7 +72,5 @@ fn main() {
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = PathBuf::from(out_dir());
-    bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
+    bindings.write_to_file(out_path.join("bindings.rs")).expect("Couldn't write bindings!");
 }
