@@ -38,7 +38,8 @@ fn main() {
     let build_dir = out_dir().join("build");
     fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
 
-    println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
+    let root_dir = env!("CARGO_MANIFEST_DIR");
+    println!("cargo:rustc-link-search={}/Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64", root_dir);
     println!("cargo:rustc-link-lib=dylib=cuda");
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
