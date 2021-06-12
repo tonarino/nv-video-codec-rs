@@ -1,7 +1,12 @@
-use crate::common::{CudaVideoCodec, Dim, Rect};
-use nv_video_codec_sys::{self, __BindgenBitfieldUnit, cuvidCtxLockCreate, CUVIDPARSERPARAMS};
-use rustacuda::context::Context;
+use crate::common::{CudaVideoCodec, Dim, IntoCudaResult, Rect};
+use nv_video_codec_sys::{
+    self, __BindgenBitfieldUnit, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDestroyVideoParser,
+    CUVIDPARSERPARAMS,
+};
+use rustacuda::context::{Context, ContextHandle};
 use std::mem::MaybeUninit;
+
+use super::NvDecoderError;
 
 pub struct Frame {}
 
@@ -42,7 +47,7 @@ impl NvDecoderBuilder {
     builder_field_setter!(max_height: u32);
     builder_field_setter!(clock_rate: u32);
 
-    pub fn build(self) -> NvDecoder {
+    pub fn build(self) -> Result<NvDecoder, NvDecoderError> {
         NvDecoder::new(
             self.context,
             self.use_device_frame,
@@ -64,6 +69,12 @@ pub struct CUvideoparser {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
+#[repr(C)]
+pub struct CUvideoctxlock {
+    _data: [u8; 0],
+    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+}
+
 pub struct NvDecoder {
     parser: *mut CUvideoparser,
     context: Context,
@@ -74,6 +85,7 @@ pub struct NvDecoder {
     resize_dim: Option<Dim>,
     max_width: u32,
     max_height: u32,
+    ctx_lock: *mut CUvideoctxlock,
 }
 
 impl NvDecoder {
@@ -88,7 +100,7 @@ impl NvDecoder {
         max_width: u32,
         max_height: u32,
         clock_rate: u32,
-    ) -> Self {
+    ) -> Result<Self, NvDecoderError> {
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
             CodecType: codec.into(),
@@ -113,19 +125,26 @@ impl NvDecoder {
             pExtVideoInfo: std::ptr::null_mut(),
         };
 
-        // TODO
-        // cuvidCtxLockCreate(a, ctx)
+        let ctx_lock = unsafe {
+            let mut ctx_lock: MaybeUninit<*mut CUvideoctxlock> = MaybeUninit::uninit();
+            cuvidCtxLockCreate(
+                ctx_lock.as_mut_ptr() as *mut nv_video_codec_sys::CUvideoctxlock,
+                context.get_inner() as *mut nv_video_codec_sys::CUctx_st,
+            )
+            .into_cuda_result()?;
+            ctx_lock.assume_init()
+        };
 
         let parser = unsafe {
             let mut parser: MaybeUninit<*mut CUvideoparser> = MaybeUninit::uninit();
             nv_video_codec_sys::cuvidCreateVideoParser(
-                parser.as_mut_ptr() as *mut *mut core::ffi::c_void,
+                parser.as_mut_ptr() as *mut nv_video_codec_sys::CUvideoparser,
                 &mut params,
             );
             parser.assume_init()
         };
 
-        Self {
+        Ok(Self {
             parser,
             context,
             use_device_frame,
@@ -135,7 +154,8 @@ impl NvDecoder {
             resize_dim,
             max_width,
             max_height,
-        }
+            ctx_lock,
+        })
     }
 
     /// Returns the number of frames decoded
@@ -165,6 +185,18 @@ impl NvDecoder {
 
 impl Drop for NvDecoder {
     fn drop(&mut self) {
-        todo!()
+        if !self.parser.is_null() {
+            unsafe {
+                let err = cuvidDestroyVideoParser(self.parser as nv_video_codec_sys::CUvideoparser);
+                err.into_cuda_result()
+                    .expect("Failure on nvdecoder parser destroy");
+            }
+        }
+
+        unsafe {
+            let err = cuvidCtxLockDestroy(self.ctx_lock as nv_video_codec_sys::CUvideoctxlock);
+            err.into_cuda_result()
+                .expect("Failure on nvdecoder ctx lock destroy");
+        }
     }
 }
