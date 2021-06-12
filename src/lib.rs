@@ -39,7 +39,7 @@ mod tests {
         let context =
             Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
         let decoder =
-            NvDecoderBuilder::new(context, false, crate::common::CudaVideoCodec::H264).build()?;
+            NvDecoderBuilder::new(context, false, crate::common::CudaVideoCodec::HEVC).build()?;
         std::mem::drop(decoder);
         Ok(())
     }
