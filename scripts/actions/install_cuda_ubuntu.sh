@@ -141,6 +141,8 @@ CUDA_PATH=/usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR}
 echo "CUDA_PATH=${CUDA_PATH}"
 export CUDA_PATH=${CUDA_PATH}
 
+# setup symlink
+sudo ln -s "$CUDA_PATH/lib64/stubs/libcuda.so" "$CUDA_PATH/lib64/stubs/libcuda.so.1" 
 
 # Quick test. @temp
 export PATH="$CUDA_PATH/bin:$PATH"
