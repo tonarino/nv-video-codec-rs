@@ -11,11 +11,34 @@ env:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # explicit include-based build matrix, of known valid options
+      matrix:
+        include:
+          # 20.04 supports CUDA 11.0+
+          - os: ubuntu-20.04
+            cuda: "11.3"
+            gcc: 10
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Install CUDA
+      env:
+        cuda: ${{ matrix.cuda }}
+      run: ./scripts/actions/install_cuda_ubuntu.sh
+      shell: bash
+
+    # Specify the correct host compilers
+    - name: Install/Select gcc and g++ 
+      run: |
+        sudo apt-get install -y gcc-${{ matrix.gcc }} g++-${{ matrix.gcc }}
+        echo "CC=/usr/bin/gcc-${{ matrix.gcc }}" >> $GITHUB_ENV
+        echo "CXX=/usr/bin/g++-${{ matrix.gcc }}" >> $GITHUB_ENV
+        echo "CUDAHOSTCXX=/usr/bin/g++-${{ matrix.gcc }}" >> $GITHUB_ENV
+    
     - name: Build
       run: cargo build --verbose
     - name: Run tests
