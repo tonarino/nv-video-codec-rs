@@ -1,4 +1,3 @@
-extern crate anyhow;
 pub extern crate nv_video_codec_sys;
 
 #[macro_use]
@@ -18,6 +17,8 @@ pub mod nvencoder;
 
 #[cfg(test)]
 mod tests {
+    extern crate anyhow;
+
     use rustacuda::{
         context::{Context, ContextFlags},
         device::Device,
