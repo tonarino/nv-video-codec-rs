@@ -1,6 +1,9 @@
 pub extern crate nv_video_codec_sys;
 
 #[macro_use]
+extern crate thiserror;
+
+#[macro_use]
 extern crate rustacuda;
 
 #[macro_use]
