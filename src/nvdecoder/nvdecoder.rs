@@ -70,13 +70,13 @@ impl NvDecoderBuilder {
 }
 
 #[repr(C)]
-pub struct CUvideoparser {
+struct CUvideoparser {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
 #[repr(C)]
-pub struct CUvideoctxlock {
+struct CUvideoctxlock {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
