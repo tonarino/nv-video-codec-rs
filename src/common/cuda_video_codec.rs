@@ -30,17 +30,17 @@ impl Into<nv_video_codec_sys::cudaVideoCodec> for CudaVideoCodec {
             CudaVideoCodec::JPEG => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_JPEG,
             CudaVideoCodec::H264SVC => {
                 nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_H264_SVC
-            }
+            },
             CudaVideoCodec::H264MVC => {
                 nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_H264_MVC
-            }
+            },
             CudaVideoCodec::HEVC => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_HEVC,
             CudaVideoCodec::VP8 => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_VP8,
             CudaVideoCodec::VP9 => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_VP9,
             CudaVideoCodec::AV1 => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_AV1,
             CudaVideoCodec::YUV420 => {
                 nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_YUV420
-            }
+            },
             CudaVideoCodec::YV12 => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_YV12,
             CudaVideoCodec::NV12 => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_NV12,
             CudaVideoCodec::YUYV => nv_video_codec_sys::cudaVideoCodec_enum::cudaVideoCodec_YUYV,
