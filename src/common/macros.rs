@@ -13,3 +13,13 @@ macro_rules! builder_field_setter_opt {
         }
     };
 }
+
+macro_rules! define_opaque_pointer_type {
+    ($name:ident) => {
+        #[repr(C)]
+        struct $name {
+            _data: [u8; 0],
+            _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+        }
+    }
+}
