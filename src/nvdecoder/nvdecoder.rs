@@ -1,10 +1,17 @@
-use crate::common::{CudaVideoCodec, Dim, IntoCudaResult, Rect};
+use crate::common::{
+    CudaResult, CudaVideoChromaFormat, CudaVideoCodec, CudaVideoCreateFlags,
+    CudaVideoDeinterlaceMode, CudaVideoSurfaceFormat, Dim, IntoCudaResult, Rect,
+};
 use nv_video_codec_sys::{
     self, CUstream, CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
-    __BindgenBitfieldUnit, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
-    cuvidDestroyVideoParser, cuvidParseVideoData, CUVIDEOFORMAT, CUVIDOPERATINGPOINTINFO,
-    CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS, CUVIDSOURCEDATAPACKET,
+    __BindgenBitfieldUnit, cuArray3DCreate_v2,
+    cudaVideoCodec_enum::cudaVideoCodec_NV12,
+    cudaVideoSurfaceFormat_enum::{cudaVideoSurfaceFormat_NV12, cudaVideoSurfaceFormat_P016},
+    cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture, cuvidDestroyVideoParser,
+    cuvidGetDecoderCaps, cuvidParseVideoData, CUVIDDECODECAPS, CUVIDDECODECREATEINFO,
+    CUVIDEOFORMAT, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS,
+    CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
 };
 use parking_lot::{Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
@@ -87,12 +94,18 @@ pub struct NvDecoder {
     context: Context,
     use_device_frame: bool,
     codec: CudaVideoCodec,
+    chroma_format: CudaVideoChromaFormat,
+    output_format: CudaVideoSurfaceFormat,
+    video_format: CUVIDEOFORMAT,
     device_frame_pitched: bool,
     crop_rect: Option<Rect>,
     resize_dim: Option<Dim>,
     max_width: u32,
     max_height: u32,
     ctx_lock: *mut CUvideoctxlock,
+    video_info: String,
+    bitdepth_minus_8: i32,
+    bpp: i32,
 
     n_decoded_frame: usize,
     n_decoded_frame_returned: usize,
@@ -102,6 +115,12 @@ pub struct NvDecoder {
     n_pic_num_in_decode_order: [usize; 32],
     n_decode_pic_cnt: usize,
     n_operating_point: usize,
+
+    /// output dimensions
+    width: u32,
+    luma_height: u32,
+    chroma_height: u32,
+    num_chroma_planes: u32,
 }
 
 /// decoder refers to an NvDecoder
@@ -144,9 +163,135 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
+fn do_ctxpush_cuvidfunc<F, T>(context: &Context, mut func: F)
+where
+    F: FnMut() -> T,
+    T: IntoCudaResult<()>,
+{
+    ContextStack::push(context).unwrap();
+    func().into_cuda_result().expect("Cuda NVDEC api call failure");
+    ContextStack::pop().unwrap();
+}
+
 impl NvDecoder {
     // TODO(efyang) : switch these over to result types and just handle the results
-    fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
+    fn handle_video_sequence(&mut self, raw_video_format: *mut CUVIDEOFORMAT) -> i32 {
+        let video_format;
+        unsafe {
+            video_format = *raw_video_format;
+        }
+        self.video_info = format!("Video Input Information:\t{:?}", raw_video_format);
+
+        let decode_surface = video_format.min_num_decode_surfaces;
+
+        let mut decode_caps = CUVIDDECODECAPS::default();
+        decode_caps.eCodecType = video_format.codec;
+        decode_caps.eChromaFormat = video_format.codec;
+        decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
+        do_ctxpush_cuvidfunc(&self.context, || unsafe {
+            cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
+        });
+
+        if decode_caps.bIsSupported == 0 {
+            // eprintln!("Codec not supported on this GPU");
+            // return decode_surface as i32;
+            panic!("Codec not supported on this GPU");
+        }
+
+        if video_format.coded_width > decode_caps.nMaxWidth
+            || video_format.coded_height > decode_caps.nMaxHeight
+        {
+            panic!(
+                "Resolution: {}x{}
+                Max supported (wxh): {}x{}
+                Resolution not supported on this GPU",
+                video_format.coded_width,
+                video_format.coded_height,
+                decode_caps.nMaxWidth,
+                decode_caps.nMaxHeight
+            );
+        }
+
+        let mb_count = (video_format.coded_width >> 4) * (video_format.coded_height >> 4);
+        if mb_count > decode_caps.nMaxMBCount {
+            panic!(
+                "MBCount: {}
+                Max supported MBCount: {}
+                MBCount not supported on this GPU",
+                mb_count, decode_caps.nMaxMBCount,
+            );
+        }
+
+        if self.width != 0 && self.luma_height != 0 && self.chroma_height != 0 {
+            // cuvidCreateDecoder() has been called before, and now there's possible config change
+            // L229
+            todo!()
+        }
+
+        // eCodec has been set in the constructor (for parser). Here it's set again for potential correction
+        self.codec = video_format.codec.into();
+        self.chroma_format = video_format.chroma_format.into();
+        self.bitdepth_minus_8 = video_format.bit_depth_luma_minus8 as i32;
+        self.bpp = if self.bitdepth_minus_8 > 0 { 2 } else { 1 };
+
+        // Set the output surface format same as chroma format
+        if matches!(
+            self.chroma_format,
+            CudaVideoChromaFormat::YUV420 | CudaVideoChromaFormat::Monochrome
+        ) {
+            self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
+                CudaVideoSurfaceFormat::P016
+            } else {
+                CudaVideoSurfaceFormat::NV12
+            };
+        } else if matches!(self.chroma_format, CudaVideoChromaFormat::YUV444) {
+            self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
+                CudaVideoSurfaceFormat::YUV444_16bit
+            } else {
+                CudaVideoSurfaceFormat::YUV444
+            };
+        } else if matches!(self.chroma_format, CudaVideoChromaFormat::YUV422) {
+            // no 4:2:2 output format supported yet so make 420 default
+            self.output_format = CudaVideoSurfaceFormat::NV12;
+        }
+
+        // TODO(efyang) : create safe wrapper over VideoFormat
+        self.video_format = video_format;
+
+        let mut video_decode_create_info = CUVIDDECODECREATEINFO::default();
+        video_decode_create_info.CodecType = video_format.codec;
+        video_decode_create_info.ChromaFormat = video_format.chroma_format;
+        video_decode_create_info.OutputFormat = self.output_format.into();
+        video_decode_create_info.bitDepthMinus8 = video_format.bit_depth_luma_minus8 as u64;
+        if video_format.progressive_sequence != 0 {
+            video_decode_create_info.DeinterlaceMode = CudaVideoDeinterlaceMode::Weave.into();
+        } else {
+            video_decode_create_info.DeinterlaceMode = CudaVideoDeinterlaceMode::Adaptive.into();
+        }
+        video_decode_create_info.ulNumOutputSurfaces = 2;
+        // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
+        video_decode_create_info.ulCreationFlags = {
+            let cf: u32 = CudaVideoCreateFlags::PreferCUVID.into();
+            cf as u64
+        };
+        video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
+        video_decode_create_info.vidLock = self.ctx_lock as nv_video_codec_sys::CUvideoctxlock;
+        video_decode_create_info.ulWidth = video_format.coded_width as u64;
+        video_decode_create_info.ulHeight = video_format.coded_height as u64;
+        // AV1 has max width/height of sequence in sequence header
+        if matches!(video_format.codec.into(), CudaVideoCodec::AV1)
+            && video_format.seqhdr_data_length > 0
+        {
+            // dont overwrite if it is already set from cmdline or reconfig.txt
+            // L280
+            todo!()
+        }
+
+        self.max_width = std::cmp::max(self.max_width, video_format.coded_width);
+        self.max_height = std::cmp::max(self.max_height, video_format.coded_height);
+        video_decode_create_info.ulMaxWidth = self.max_width as u64;
+        video_decode_create_info.ulMaxHeight = self.max_height as u64;
+
         todo!()
     }
 
@@ -158,13 +303,11 @@ impl NvDecoder {
                 self.n_decode_pic_cnt;
         }
         self.n_decode_pic_cnt += 1;
-        ContextStack::push(&self.context).unwrap();
-        unsafe {
+
+        do_ctxpush_cuvidfunc(&self.context, || unsafe {
             cuvidDecodePicture(self.decoder as nv_video_codec_sys::CUvideodecoder, pic_params)
-                .into_cuda_result()
-                .unwrap();
-        }
-        ContextStack::pop().unwrap();
+        });
+
         return 1;
     }
 
@@ -239,6 +382,11 @@ impl NvDecoder {
             max_width,
             max_height,
             ctx_lock,
+            bitdepth_minus_8: 0,
+            chroma_format: CudaVideoChromaFormat::YUV420,
+            output_format: CudaVideoSurfaceFormat::NV12,
+            video_format: Default::default(),
+            video_info: "".to_string(),
             n_decoded_frame: 0,
             n_decoded_frame_returned: 0,
             stream: std::ptr::null_mut(),
@@ -247,6 +395,11 @@ impl NvDecoder {
             n_decode_pic_cnt: 0,
             decoder: std::ptr::null_mut(),
             n_operating_point: 0,
+            width: 0,
+            luma_height: 0,
+            chroma_height: 0,
+            num_chroma_planes: 0,
+            bpp: 1,
         };
 
         // TODO: handle errors
@@ -264,7 +417,7 @@ impl NvDecoder {
 
             // TODO: other stuff not mentioned: sane defaults?
             // most likely broken tbh
-            _bitfield_1: __BindgenBitfieldUnit::new([0; 4]),
+            _bitfield_1: CUVIDPARSERPARAMS::new_bitfield_1(1, 31),
             _bitfield_align_1: [0; 0],
             ulErrorThreshold: 0,
             uReserved1: [0; 4],
