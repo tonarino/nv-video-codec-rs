@@ -3,20 +3,21 @@ use crate::common::{
     CudaVideoDeinterlaceMode, CudaVideoSurfaceFormat, Dim, IntoCudaResult, Rect,
 };
 use nv_video_codec_sys::{
-    self, CUstream, CUvideodecoder,
-    CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
-    __BindgenBitfieldUnit, cuArray3DCreate_v2,
+    self, __BindgenBitfieldUnit, cuArray3DCreate_v2,
     cudaVideoCodec_enum::cudaVideoCodec_NV12,
     cudaVideoSurfaceFormat_enum::{cudaVideoSurfaceFormat_NV12, cudaVideoSurfaceFormat_P016},
-    cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture, cuvidDestroyVideoParser,
-    cuvidGetDecoderCaps, cuvidParseVideoData, CUVIDDECODECAPS, CUVIDDECODECREATEINFO,
-    CUVIDEOFORMAT, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS,
-    CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
+    cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
+    cuvidDestroyVideoParser, cuvidGetDecoderCaps, cuvidParseVideoData, CUstream, CUvideodecoder,
+    CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
+    CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT, CUVIDOPERATINGPOINTINFO,
+    CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS, CUVIDSOURCEDATAPACKET,
+    _CUVIDDECODECAPS,
 };
 use parking_lot::{Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
-    collections::VecDeque, ffi::c_void, mem::MaybeUninit, ops::Deref, os::raw::c_ulong, sync::Arc,
+    collections::VecDeque, ffi::c_void, intrinsics::ceilf32, mem::MaybeUninit, ops::Deref,
+    os::raw::c_ulong, sync::Arc, time::Instant,
 };
 
 use super::{DecoderPacketFlags, NvDecoderError};
@@ -32,8 +33,8 @@ pub struct NvDecoderBuilder {
     codec: CudaVideoCodec,
     low_latency: bool,
     device_frame_pitched: bool,
-    crop_rect: Option<Rect>,
-    resize_dim: Option<Dim>,
+    crop_rect: Rect,
+    resize_dim: Dim,
     max_width: u32,
     max_height: u32,
     clock_rate: u32,
@@ -44,9 +45,9 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(device_frame_pitched: bool);
 
-    builder_field_setter_opt!(crop_rect: Rect);
+    builder_field_setter!(crop_rect: Rect);
 
-    builder_field_setter_opt!(resize_dim: Dim);
+    builder_field_setter!(resize_dim: Dim);
 
     builder_field_setter!(max_width: u32);
 
@@ -61,8 +62,8 @@ impl NvDecoderBuilder {
             codec,
             low_latency: false,
             device_frame_pitched: false,
-            crop_rect: None,
-            resize_dim: None,
+            crop_rect: Default::default(),
+            resize_dim: Default::default(),
             max_width: 0,
             max_height: 0,
             clock_rate: 1000,
@@ -90,7 +91,7 @@ define_opaque_pointer_type!(CUvideoctxlock);
 
 pub struct NvDecoder {
     parser: *mut CUvideoparser,
-    decoder: *mut CUvideodecoder,
+    decoder: CUvideodecoder,
     context: Context,
     use_device_frame: bool,
     codec: CudaVideoCodec,
@@ -98,14 +99,15 @@ pub struct NvDecoder {
     output_format: CudaVideoSurfaceFormat,
     video_format: CUVIDEOFORMAT,
     device_frame_pitched: bool,
-    crop_rect: Option<Rect>,
-    resize_dim: Option<Dim>,
+    crop_rect: Rect,
+    resize_dim: Dim,
     max_width: u32,
     max_height: u32,
     ctx_lock: *mut CUvideoctxlock,
     video_info: String,
     bitdepth_minus_8: i32,
     bpp: i32,
+    display_rect: Rect,
 
     n_decoded_frame: usize,
     n_decoded_frame_returned: usize,
@@ -121,6 +123,10 @@ pub struct NvDecoder {
     luma_height: u32,
     chroma_height: u32,
     num_chroma_planes: u32,
+
+    /// height of the mapped surface
+    surface_height: u64,
+    surface_width: u64,
 }
 
 /// decoder refers to an NvDecoder
@@ -176,11 +182,13 @@ where
 impl NvDecoder {
     // TODO(efyang) : switch these over to result types and just handle the results
     fn handle_video_sequence(&mut self, raw_video_format: *mut CUVIDEOFORMAT) -> i32 {
+        let session_init_start = Instant::now();
+
         let video_format;
         unsafe {
             video_format = *raw_video_format;
         }
-        self.video_info = format!("Video Input Information:\t{:?}", raw_video_format);
+        self.video_info = format!("Video Input Information:\n{:?}", raw_video_format);
 
         let decode_surface = video_format.min_num_decode_surfaces;
 
@@ -292,7 +300,62 @@ impl NvDecoder {
         video_decode_create_info.ulMaxWidth = self.max_width as u64;
         video_decode_create_info.ulMaxHeight = self.max_height as u64;
 
-        todo!()
+        if !(self.crop_rect.right != 0 && self.crop_rect.bottom != 0)
+            && !(self.resize_dim.width != 0 && self.resize_dim.height != 0)
+        {
+            self.width = (video_format.display_area.right - video_format.display_area.left) as u32;
+            self.luma_height =
+                (video_format.display_area.bottom - video_format.display_area.top) as u32;
+            video_decode_create_info.ulTargetWidth = video_format.coded_width as u64;
+            video_decode_create_info.ulTargetHeight = video_format.coded_height as u64;
+        } else {
+            if self.resize_dim.width != 0 && self.resize_dim.height != 0 {
+                video_decode_create_info.display_area.left = video_format.display_area.left as i16;
+                video_decode_create_info.display_area.top = video_format.display_area.top as i16;
+                video_decode_create_info.display_area.right =
+                    video_format.display_area.right as i16;
+                video_decode_create_info.display_area.bottom =
+                    video_format.display_area.bottom as i16;
+                self.width = self.resize_dim.width as u32;
+                self.luma_height = self.resize_dim.height as u32;
+            }
+
+            // TODO(efyang) change rect and dim to be u32
+            if self.crop_rect.right != 0 && self.crop_rect.bottom != 0 {
+                video_decode_create_info.display_area.left = self.crop_rect.left as i16;
+                video_decode_create_info.display_area.top = self.crop_rect.top as i16;
+                video_decode_create_info.display_area.right = self.crop_rect.right as i16;
+                video_decode_create_info.display_area.bottom = self.crop_rect.bottom as i16;
+                self.width = (self.crop_rect.right - self.crop_rect.left) as u32;
+                self.luma_height = (self.crop_rect.bottom - self.crop_rect.top) as u32;
+            }
+            video_decode_create_info.ulTargetWidth = self.width as u64;
+            video_decode_create_info.ulTargetHeight = self.luma_height as u64;
+        }
+
+        self.chroma_height =
+            f64::ceil(self.luma_height as f64 * self.output_format.chroma_height_factor()) as u32;
+        self.num_chroma_planes = self.output_format.chroma_plane_count() as u32;
+        self.surface_height = video_decode_create_info.ulTargetHeight;
+        self.surface_width = video_decode_create_info.ulTargetWidth;
+        self.display_rect.bottom = video_decode_create_info.display_area.bottom as usize;
+        self.display_rect.top = video_decode_create_info.display_area.top as usize;
+        self.display_rect.left = video_decode_create_info.display_area.left as usize;
+        self.display_rect.right = video_decode_create_info.display_area.right as usize;
+
+        // TODO(efyang) print decoding params
+        self.video_info += &format!("Video Decoding Params:\n{:?}", video_decode_create_info);
+
+        do_ctxpush_cuvidfunc(&self.context, || unsafe {
+            cuvidCreateDecoder(&mut self.decoder, &mut video_decode_create_info)
+        });
+
+        println!(
+            "Session Initialization Time: {} seconds",
+            session_init_start.elapsed().as_secs_f64()
+        );
+
+        decode_surface as i32
     }
 
     fn handle_picture_decode(&mut self, pic_params: *mut CUVIDPICPARAMS) -> i32 {
@@ -305,7 +368,7 @@ impl NvDecoder {
         self.n_decode_pic_cnt += 1;
 
         do_ctxpush_cuvidfunc(&self.context, || unsafe {
-            cuvidDecodePicture(self.decoder as nv_video_codec_sys::CUvideodecoder, pic_params)
+            cuvidDecodePicture(self.decoder, pic_params)
         });
 
         return 1;
@@ -352,8 +415,8 @@ impl NvDecoder {
         codec: CudaVideoCodec,
         low_latency: bool,
         device_frame_pitched: bool,
-        crop_rect: Option<Rect>,
-        resize_dim: Option<Dim>,
+        crop_rect: Rect,
+        resize_dim: Dim,
         max_width: u32,
         max_height: u32,
         clock_rate: u32,
@@ -400,6 +463,9 @@ impl NvDecoder {
             chroma_height: 0,
             num_chroma_planes: 0,
             bpp: 1,
+            display_rect: Default::default(),
+            surface_height: 0,
+            surface_width: 0,
         };
 
         // TODO: handle errors

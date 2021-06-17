@@ -6,13 +6,13 @@ macro_rules! builder_field_setter {
     };
 }
 
-macro_rules! builder_field_setter_opt {
-    ($name:ident : $type:ty) => {
-        pub fn $name(self, $name: $type) -> Self {
-            Self { $name: Some($name), ..self }
-        }
-    };
-}
+// macro_rules! builder_field_setter_opt {
+//     ($name:ident : $type:ty) => {
+//         pub fn $name(self, $name: $type) -> Self {
+//             Self { $name: Some($name), ..self }
+//         }
+//     };
+// }
 
 macro_rules! define_opaque_pointer_type {
     ($name:ident) => {
