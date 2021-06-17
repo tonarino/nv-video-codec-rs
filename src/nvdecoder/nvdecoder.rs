@@ -1,31 +1,32 @@
-use crate::common::{
-    CudaResult, CudaVideoChromaFormat, CudaVideoCodec, CudaVideoCreateFlags,
-    CudaVideoDeinterlaceMode, CudaVideoSurfaceFormat, Dim, IntoCudaResult, Rect,
+use crate::{
+    common::{
+        CudaResult, CudaVideoChromaFormat, CudaVideoCodec, CudaVideoCreateFlags,
+        CudaVideoDeinterlaceMode, CudaVideoSurfaceFormat, Dim, IntoCudaResult, Rect,
+    },
+    nvdecoder::FrameData,
 };
 use nv_video_codec_sys::{
-    self, __BindgenBitfieldUnit, cuArray3DCreate_v2,
+    self, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideodecoder,
+    CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
+    __BindgenBitfieldUnit, cuArray3DCreate_v2, cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2,
+    cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cudaVideoCodec_enum::cudaVideoCodec_NV12,
     cudaVideoSurfaceFormat_enum::{cudaVideoSurfaceFormat_NV12, cudaVideoSurfaceFormat_P016},
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
-    cuvidDestroyVideoParser, cuvidGetDecoderCaps, cuvidParseVideoData, CUstream, CUvideodecoder,
-    CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
-    CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT, CUVIDOPERATINGPOINTINFO,
-    CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS, CUVIDSOURCEDATAPACKET,
-    _CUVIDDECODECAPS,
+    cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
+    cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
+    CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT, CUVIDGETDECODESTATUS,
+    CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS,
+    CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
 };
 use parking_lot::{Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
-    collections::VecDeque, ffi::c_void, intrinsics::ceilf32, mem::MaybeUninit, ops::Deref,
-    os::raw::c_ulong, sync::Arc, time::Instant,
+    collections::VecDeque, ffi::c_void, mem::MaybeUninit, ops::Deref, os::raw::c_ulong, sync::Arc,
+    time::Instant,
 };
 
-use super::{DecoderPacketFlags, NvDecoderError};
-
-pub struct Frame {
-    timestamp: i64,
-    data: Vec<u8>,
-}
+use super::{DecoderPacketFlags, Frame, NvDecoderError};
 
 pub struct NvDecoderBuilder {
     context: Context,
@@ -70,7 +71,7 @@ impl NvDecoderBuilder {
         }
     }
 
-    pub fn build(self) -> Result<NvDecoder, NvDecoderError> {
+    pub fn build<'a>(self) -> Result<NvDecoder<'a>, NvDecoderError> {
         NvDecoder::new(
             self.context,
             self.use_device_frame,
@@ -89,7 +90,7 @@ impl NvDecoderBuilder {
 define_opaque_pointer_type!(CUvideoparser);
 define_opaque_pointer_type!(CUvideoctxlock);
 
-pub struct NvDecoder {
+pub struct NvDecoder<'a> {
     parser: *mut CUvideoparser,
     decoder: CUvideodecoder,
     context: Context,
@@ -108,12 +109,14 @@ pub struct NvDecoder {
     bitdepth_minus_8: i32,
     bpp: i32,
     display_rect: Rect,
+    device_frame_pitch: size_t,
 
     n_decoded_frame: usize,
     n_decoded_frame_returned: usize,
+    n_frame_alloc: usize,
     stream: CUstream,
     /// need mutex to cover callbacks
-    frames: Arc<Mutex<VecDeque<Frame>>>,
+    frames: Arc<Mutex<VecDeque<Frame<'a>>>>,
     n_pic_num_in_decode_order: [usize; 32],
     n_decode_pic_cnt: usize,
     n_operating_point: usize,
@@ -169,7 +172,7 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_ctxpush_cuvidfunc<F, T>(context: &Context, mut func: F)
+fn do_ctxpush_cuvidfunc<'a, F, T>(context: &'a Context, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
@@ -179,16 +182,13 @@ where
     ContextStack::pop().unwrap();
 }
 
-impl NvDecoder {
+impl<'a> NvDecoder<'a> {
     // TODO(efyang) : switch these over to result types and just handle the results
-    fn handle_video_sequence(&mut self, raw_video_format: *mut CUVIDEOFORMAT) -> i32 {
+    fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
         let session_init_start = Instant::now();
 
-        let video_format;
-        unsafe {
-            video_format = *raw_video_format;
-        }
-        self.video_info = format!("Video Input Information:\n{:?}", raw_video_format);
+        let video_format = unsafe { *video_format };
+        self.video_info = format!("Video Input Information:\n{:?}", video_format);
 
         let decode_surface = video_format.min_num_decode_surfaces;
 
@@ -346,8 +346,9 @@ impl NvDecoder {
         // TODO(efyang) print decoding params
         self.video_info += &format!("Video Decoding Params:\n{:?}", video_decode_create_info);
 
+        let decoder_ptr = &mut self.decoder;
         do_ctxpush_cuvidfunc(&self.context, || unsafe {
-            cuvidCreateDecoder(&mut self.decoder, &mut video_decode_create_info)
+            cuvidCreateDecoder(decoder_ptr, &mut video_decode_create_info)
         });
 
         println!(
@@ -374,8 +375,167 @@ impl NvDecoder {
         return 1;
     }
 
-    fn handle_picture_display(&mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
-        todo!()
+    fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
+        debug_assert!(!disp_info.is_null());
+        let disp_info = unsafe { *disp_info };
+        let mut video_processing_parameters = CUVIDPROCPARAMS::default();
+        video_processing_parameters.progressive_frame = disp_info.progressive_frame;
+        video_processing_parameters.second_field = disp_info.repeat_first_field + 1;
+        video_processing_parameters.top_field_first = disp_info.top_field_first;
+        video_processing_parameters.unpaired_field =
+            if disp_info.repeat_first_field < 0 { 1 } else { 0 };
+        video_processing_parameters.output_stream = self.stream;
+
+        let mut src_frame: CUdeviceptr = 0;
+        let mut src_pitch = 0;
+
+        // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work with this
+        ContextStack::push(&self.context).unwrap();
+        unsafe {
+            cuvidMapVideoFrame64(
+                self.decoder,
+                disp_info.picture_index,
+                &mut src_frame,
+                &mut src_pitch,
+                &mut video_processing_parameters,
+            )
+            .into_cuda_result()
+            .unwrap();
+        }
+
+        let mut decode_status = CUVIDGETDECODESTATUS::default();
+        let decode_result = unsafe {
+            cuvidGetDecodeStatus(self.decoder, disp_info.picture_index, &mut decode_status)
+                .into_cuda_result()
+        };
+        if decode_result.is_ok()
+            && matches!(
+                decode_status.decodeStatus,
+                cuvidDecodeStatus_enum::cuvidDecodeStatus_Error
+                    | cuvidDecodeStatus_enum::cuvidDecodeStatus_Error_Concealed
+            )
+        {
+            eprintln!(
+                "Decode Error occurred for picture {}",
+                self.n_pic_num_in_decode_order[disp_info.picture_index as usize]
+            );
+        }
+
+        let decoded_frame_ptr: *mut u8;
+        {
+            let mut frames = self.frames.lock();
+            self.n_decoded_frame += 1;
+            if self.n_decoded_frame > frames.len() {
+                // Not enough frames in stock
+                self.n_frame_alloc += 1;
+                let frame_data: &mut [u8];
+                if self.use_device_frame {
+                    let mut frame_data_device_ptr: CUdeviceptr = 0;
+                    if self.device_frame_pitched {
+                        // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
+                        todo!();
+                        // unsafe {
+                        //     cuMemAllocPitch_v2(
+                        //         &mut frame_data_device_ptr,
+                        //         &mut self.device_frame_pitch,
+                        //         (self.get_width() * self.bpp as u32) as size_t,
+                        //         (self.luma_height + self.chroma_height * self.num_chroma_planes)
+                        //             as size_t,
+                        //         16,
+                        //     )
+                        //     .into_cuda_result()?;
+                        // }
+                    } else {
+                        unsafe {
+                            cuMemAlloc_v2(&mut frame_data_device_ptr, self.get_frame_size() as u64)
+                                .into_cuda_result()
+                                .unwrap();
+                        }
+                    }
+                    unsafe {
+                        frame_data = std::slice::from_raw_parts_mut(
+                            frame_data_device_ptr as *mut u8,
+                            self.get_frame_size() as usize,
+                        );
+                    }
+                    frames.push_back(Frame {
+                        timestamp: disp_info.timestamp,
+                        data: FrameData::Device(frame_data),
+                    })
+                } else {
+                    let frame_data = vec![0; self.get_frame_size() as usize];
+                    frames.push_back(Frame {
+                        timestamp: disp_info.timestamp,
+                        data: FrameData::Owned(frame_data),
+                    })
+                }
+            }
+            let frame_len = frames.len();
+            // WARNING: This is a potential data race, as the mutex is unlocked when
+            // decoded_frame_ptr is being worked with. This is present in the original code, so we copy that here
+            // TODO(efyang) fix!
+            decoded_frame_ptr = frames[frame_len - 1].data.as_mut().as_mut_ptr();
+        }
+
+        // Copy luma plane
+        let mut m = CUDA_MEMCPY2D::default();
+        m.srcMemoryType = CUmemorytype_enum::CU_MEMORYTYPE_DEVICE;
+        m.srcDevice = src_frame;
+        m.srcPitch = src_pitch as u64;
+        m.dstMemoryType = if self.use_device_frame {
+            CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
+        } else {
+            CUmemorytype_enum::CU_MEMORYTYPE_HOST
+        };
+        m.dstHost = decoded_frame_ptr as *mut c_void;
+        m.dstDevice = decoded_frame_ptr as CUdeviceptr;
+        m.dstPitch = if self.device_frame_pitch != 0 {
+            self.device_frame_pitch
+        } else {
+            (self.get_width() * self.bpp as u32) as u64
+        };
+        m.WidthInBytes = (self.get_width() * self.bpp as u32) as u64;
+        m.Height = self.luma_height as u64;
+        unsafe {
+            cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
+        }
+
+        // Copy chroma plane
+        // NVDEC output has luma height aligned by 2. Adjust chroma offset by aligning height
+        m.srcDevice =
+            (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1))) as CUdeviceptr;
+        m.dstHost = ((decoded_frame_ptr) as CUdeviceptr + (m.dstPitch * self.luma_height as u64))
+            as *mut c_void;
+        m.dstDevice = m.dstHost as CUdeviceptr;
+        m.Height = self.chroma_height as u64;
+        unsafe {
+            cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
+        }
+
+        if self.num_chroma_planes == 2 {
+            m.srcDevice = (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1) * 2))
+                as CUdeviceptr;
+            m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
+                + (m.dstPitch * self.luma_height as u64 * 2))
+                as *mut c_void;
+            m.dstDevice = m.dstHost as CUdeviceptr;
+            m.Height = self.chroma_height as u64;
+            unsafe {
+                cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
+            }
+        }
+        unsafe {
+            cuStreamSynchronize(self.stream).into_cuda_result().unwrap();
+        }
+
+        ContextStack::pop().unwrap();
+        // timestamp already set earlier
+
+        unsafe {
+            cuvidUnmapVideoFrame64(self.decoder, src_frame).into_cuda_result().unwrap();
+        }
+
+        1
     }
 
     /* Called when the parser encounters sequence header for AV1 SVC content
@@ -408,7 +568,7 @@ impl NvDecoder {
     }
 }
 
-impl NvDecoder {
+impl<'a> NvDecoder<'a> {
     fn new(
         context: Context,
         use_device_frame: bool,
@@ -452,6 +612,8 @@ impl NvDecoder {
             video_info: "".to_string(),
             n_decoded_frame: 0,
             n_decoded_frame_returned: 0,
+            n_frame_alloc: 0,
+            device_frame_pitch: 0,
             stream: std::ptr::null_mut(),
             frames: Arc::new(Mutex::new(VecDeque::new())),
             n_pic_num_in_decode_order: [0; 32],
@@ -555,7 +717,7 @@ impl NvDecoder {
     //     }
     // }
 
-    pub fn get_frame<'a>(&'a mut self) -> Option<Box<dyn Deref<Target = Frame> + 'a>> {
+    pub fn get_frame(&'a mut self) -> Option<Box<dyn Deref<Target = Frame<'a>> + 'a>> {
         if self.n_decoded_frame > 0 {
             let frames_locked = self.frames.lock();
             self.n_decoded_frame -= 1;
@@ -582,10 +744,27 @@ impl NvDecoder {
         }
     }
 
-    pub fn unlock_frame(&mut self, mut frame: Frame) {
+    pub fn unlock_frame(&'a mut self, mut frame: Frame<'a>) {
         let mut frames_locked = self.frames.lock();
         frame.timestamp = 0;
         frames_locked.push_back(frame);
+    }
+
+    pub fn get_width(&self) -> u32 {
+        assert!(self.width != 0);
+        if matches!(self.output_format, CudaVideoSurfaceFormat::NV12 | CudaVideoSurfaceFormat::P016)
+        {
+            (self.width + 1) & !1
+        } else {
+            self.width
+        }
+    }
+
+    pub fn get_frame_size(&self) -> u32 {
+        assert!(self.width != 0);
+        self.get_width()
+            * (self.luma_height + self.chroma_height * self.num_chroma_planes)
+            * self.bpp as u32
     }
 
     pub fn set_reconfig_params() -> Result<(), ()> {
@@ -593,8 +772,9 @@ impl NvDecoder {
     }
 }
 
-impl Drop for NvDecoder {
+impl<'a> Drop for NvDecoder<'a> {
     fn drop(&mut self) {
+        let session_deinit_start = Instant::now();
         if !self.parser.is_null() {
             unsafe {
                 let err = cuvidDestroyVideoParser(self.parser as nv_video_codec_sys::CUvideoparser);
@@ -602,9 +782,31 @@ impl Drop for NvDecoder {
             }
         }
 
+        if !self.decoder.is_null() {
+            unsafe {
+                let err = cuvidDestroyDecoder(self.decoder);
+                err.into_cuda_result().expect("Failure on nvdecoder decoder destroy");
+            }
+        }
+
+        for frame in self.frames.lock().iter_mut() {
+            if self.use_device_frame {
+                unsafe {
+                    cuMemFree_v2(frame.data.as_mut().as_mut_ptr() as CUdeviceptr)
+                        .into_cuda_result()
+                        .expect("Failure on nvdecoder frame free");
+                }
+            }
+        }
+
+        ContextStack::pop().unwrap();
         unsafe {
             let err = cuvidCtxLockDestroy(self.ctx_lock as nv_video_codec_sys::CUvideoctxlock);
             err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");
         }
+        println!(
+            "Session Deinitialization Time: {} seconds",
+            session_deinit_start.elapsed().as_secs_f64()
+        );
     }
 }

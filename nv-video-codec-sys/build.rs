@@ -68,6 +68,8 @@ fn main() {
         .constified_enum_module("cudaVideoSurfaceFormat_enum")
         .constified_enum_module("cudaVideoDeinterlaceMode_enum")
         .constified_enum_module("cudaVideoCreateFlags_enum")
+        .constified_enum_module("cuvidDecodeStatus_enum")
+        .constified_enum_module("CUmemorytype_enum")
         .rustified_enum(".*")
         .derive_default(true)
         .allowlist_var("(?i)(.*cu.*|.*nv.*)")
