@@ -138,6 +138,7 @@ unsafe extern "C" fn handle_video_sequence_proc(
     decoder: *mut c_void,
     video_format: *mut CUVIDEOFORMAT,
 ) -> i32 {
+    println!("handle_video_sequence_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(video_format)
 }
@@ -148,6 +149,7 @@ unsafe extern "C" fn handle_picture_decode_proc(
     decoder: *mut c_void,
     pic_params: *mut CUVIDPICPARAMS,
 ) -> i32 {
+    println!("handle_picture_decode_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_decode(pic_params)
 }
@@ -158,6 +160,7 @@ unsafe extern "C" fn handle_picture_display_proc(
     decoder: *mut c_void,
     disp_info: *mut CUVIDPARSERDISPINFO,
 ) -> i32 {
+    println!("handle_picture_display_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_display(disp_info)
 }
@@ -168,6 +171,7 @@ unsafe extern "C" fn handle_operating_point_proc(
     decoder: *mut c_void,
     op_info: *mut CUVIDOPERATINGPOINTINFO,
 ) -> i32 {
+    println!("handle_operating_point_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
@@ -185,6 +189,7 @@ where
 impl<'a> NvDecoder<'a> {
     // TODO(efyang) : switch these over to result types and just handle the results
     fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
+        println!("Handle video sequence");
         let session_init_start = Instant::now();
 
         let video_format = unsafe { *video_format };
@@ -360,6 +365,7 @@ impl<'a> NvDecoder<'a> {
     }
 
     fn handle_picture_decode(&mut self, pic_params: *mut CUVIDPICPARAMS) -> i32 {
+        println!("Handle picture decode");
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!pic_params.is_null());
         unsafe {
@@ -376,6 +382,7 @@ impl<'a> NvDecoder<'a> {
     }
 
     fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
+        println!("Handle picture display");
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
         let mut video_processing_parameters = CUVIDPROCPARAMS::default();
@@ -658,7 +665,8 @@ impl<'a> NvDecoder<'a> {
             nv_video_codec_sys::cuvidCreateVideoParser(
                 parser.as_mut_ptr() as *mut nv_video_codec_sys::CUvideoparser,
                 &mut params,
-            );
+            )
+            .into_cuda_result()?;
             parser.assume_init()
         };
         this.parser = parser;
@@ -717,6 +725,7 @@ impl<'a> NvDecoder<'a> {
     //     }
     // }
 
+    // another possible race condition in the original code
     pub fn get_frame(&'a mut self) -> Option<Box<dyn Deref<Target = Frame<'a>> + 'a>> {
         if self.n_decoded_frame > 0 {
             let frames_locked = self.frames.lock();
@@ -769,6 +778,10 @@ impl<'a> NvDecoder<'a> {
 
     pub fn set_reconfig_params() -> Result<(), ()> {
         todo!()
+    }
+
+    pub fn get_video_info(&self) -> &str {
+        &self.video_info
     }
 }
 

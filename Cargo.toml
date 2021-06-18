@@ -17,3 +17,4 @@ thiserror = "1.0"
 
 [dev-dependencies]
 anyhow = "1.0"
+ac-ffmpeg = "0.17"
