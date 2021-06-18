@@ -22,8 +22,13 @@ use nv_video_codec_sys::{
 use parking_lot::{Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
-    borrow::BorrowMut, collections::VecDeque, ffi::c_void, mem::MaybeUninit, ops::Deref,
-    os::raw::c_ulong, sync::Arc, time::Instant,
+    borrow::BorrowMut,
+    collections::VecDeque,
+    mem::MaybeUninit,
+    ops::Deref,
+    os::raw::{c_int, c_ulong, c_void},
+    sync::Arc,
+    time::Instant,
 };
 
 use super::{DecoderPacketFlags, Frame, NvDecoderError};
@@ -134,7 +139,7 @@ pub struct NvDecoder<'a> {
 unsafe extern "C" fn handle_video_sequence_proc(
     decoder: *mut c_void,
     video_format: *mut CUVIDEOFORMAT,
-) -> i32 {
+) -> c_int {
     println!("handle_video_sequence_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(video_format)
@@ -145,7 +150,7 @@ unsafe extern "C" fn handle_video_sequence_proc(
 unsafe extern "C" fn handle_picture_decode_proc(
     decoder: *mut c_void,
     pic_params: *mut CUVIDPICPARAMS,
-) -> i32 {
+) -> c_int {
     println!("handle_picture_decode_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_decode(pic_params)
@@ -156,7 +161,7 @@ unsafe extern "C" fn handle_picture_decode_proc(
 unsafe extern "C" fn handle_picture_display_proc(
     decoder: *mut c_void,
     disp_info: *mut CUVIDPARSERDISPINFO,
-) -> i32 {
+) -> c_int {
     println!("handle_picture_display_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_display(disp_info)
@@ -167,7 +172,7 @@ unsafe extern "C" fn handle_picture_display_proc(
 unsafe extern "C" fn handle_operating_point_proc(
     decoder: *mut c_void,
     op_info: *mut CUVIDOPERATINGPOINTINFO,
-) -> i32 {
+) -> c_int {
     println!("handle_operating_point_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
@@ -649,7 +654,7 @@ impl<'a> NvDecoder<'a> {
 
             // TODO: other stuff not mentioned: sane defaults?
             // most likely broken tbh
-            _bitfield_1: CUVIDPARSERPARAMS::new_bitfield_1(1, 31),
+            _bitfield_1: CUVIDPARSERPARAMS::new_bitfield_1(0, 0),
             _bitfield_align_1: [0; 0],
             ulErrorThreshold: 0,
             uReserved1: [0; 4],
