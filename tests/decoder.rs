@@ -94,6 +94,8 @@ fn decode_h265() -> Result<()> {
 
 #[test]
 fn parse_h265() -> Result<()> {
+    let _context = nv_video_codec_sys::CreateCudaContext(0);
+
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let input_path = root.join("resources/test/Big_Buck_Bunny_1080_10s_1MB_F1.H265");
     let data = std::fs::read(input_path)?;
