@@ -91,3 +91,14 @@ fn decode_h265() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn parse_h265() -> Result<()> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let input_path = root.join("resources/test/Big_Buck_Bunny_1080_10s_1MB_F1.H265");
+    let data = std::fs::read(input_path)?;
+
+    unsafe { nv_video_codec_sys::ParseFrame(data.as_ptr(), data.len() as i32) };
+
+    Ok(())
+}

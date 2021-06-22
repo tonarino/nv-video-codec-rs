@@ -46,6 +46,17 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
     println!("cargo:rustc-link-lib=dylib=nvidia-encode");
 
+    cc::Build::new()
+        .cpp(true)
+        .file("wrapper.cpp")
+        .include("Video_Codec_SDK_11.0.10/Interface")
+        .include(cuda_include.to_string_lossy().to_string())
+        .cpp_link_stdlib("stdc++")
+        .compile("wrapper");
+    println!("cargo:rustc-link-search=native={}", out_dir().display());
+    println!("cargo:rustc-link-lib=static=wrapper");
+    println!("cargo:rerun-if-changed=wrapper.cpp");
+
     if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=dylib=c++");
     } else {
@@ -74,7 +85,7 @@ fn main() {
         .derive_default(true)
         .allowlist_var("(?i)(.*cu.*|.*nv.*)")
         .allowlist_type("(?i)(.*cu.*|.*nv.*)")
-        .allowlist_function("(?i)(.*cu.*|.*nv.*)")
+        .allowlist_function("(?i)(.*cu.*|.*nv.*|ParseFrame)")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
