@@ -1,10 +1,24 @@
 #include "wrapper.h"
 #include <iostream>
 
-int CUDAAPI HandleVideoSequenceProc(void*, CUVIDEOFORMAT*) { std::cerr << "**HandleVideoSequenceProc()\n"; return 0; }
-int CUDAAPI HandlePictureDecodeProc(void*, CUVIDPICPARAMS*) { std::cerr << "**HandlePictureDecodeProc()\n"; return 0; }
-int CUDAAPI HandlePictureDisplayProc(void*, CUVIDPARSERDISPINFO*) { std::cerr << "**HandlePictureDisplayProc()\n"; return 0; }
-int CUDAAPI HandleOperatingPointProc(void*, CUVIDOPERATINGPOINTINFO*) { std::cerr << "**HandleOperatingPointProc()\n"; return 0; }
+int CUDAAPI HandleVideoSequenceProc(void*, CUVIDEOFORMAT*) { std::cerr << "**HandleVideoSequenceProc()" << std::endl; return 0; }
+int CUDAAPI HandlePictureDecodeProc(void*, CUVIDPICPARAMS*) { std::cerr << "**HandlePictureDecodeProc()" << std::endl; return 0; }
+int CUDAAPI HandlePictureDisplayProc(void*, CUVIDPARSERDISPINFO*) { std::cerr << "**HandlePictureDisplayProc()" << std::endl; return 0; }
+int CUDAAPI HandleOperatingPointProc(void*, CUVIDOPERATINGPOINTINFO*) { std::cerr << "**HandleOperatingPointProc()" << std::endl; return 0; }
+
+CUcontext CreateCudaContext(int iGpu) {
+    ck(cuInit(0));
+    int nGpu = 0;
+    ck(cuDeviceGetCount(&nGpu));
+    if (iGpu < 0 || iGpu >= nGpu) {
+        std::cerr << "GPU ordinal out of range. Should be within [" << 0 << ", " << nGpu - 1 << "]" << std::endl;
+        return NULL;
+    }
+
+    CUcontext cuContext = NULL;
+    createCudaContext(&cuContext, iGpu, 0);
+    return cuContext;
+}
 
 void ParseFrame(const uint8_t* frame, int size) {
     std::cerr << "**ParseFrame()\n";
