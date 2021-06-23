@@ -82,9 +82,7 @@ fn decode_h265() -> Result<()> {
         NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::CudaVideoCodec::HEVC)
             .build()?;
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let input_path = root.join("resources/test/Big_Buck_Bunny_1080_10s_1MB_F1.H265");
-    let data = std::fs::read(input_path)?;
+    let data = include_bytes!("../resources/test/single_i_frame.hevc");
 
     let frames_decoded = decoder.decode(&data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
     println!("frames decoded: {}, video info: {}", frames_decoded, decoder.get_video_info());
