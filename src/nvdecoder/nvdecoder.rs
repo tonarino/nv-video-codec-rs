@@ -21,7 +21,7 @@ use ffi::{
 };
 use nv_video_codec_sys as ffi;
 use parking_lot::{Mutex, MutexGuard};
-use rustacuda::context::{Context, ContextHandle, ContextStack};
+use rustacuda::context::{Context, ContextHandle, ContextStack, CurrentContext};
 use std::{
     collections::VecDeque,
     convert::{TryFrom, TryInto},
@@ -183,7 +183,8 @@ where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
 {
-    ContextStack::push(context).unwrap();
+    let unowned = CurrentContext::get_current().unwrap();
+    ContextStack::push(&unowned).unwrap();
     func().into_cuda_result().expect("Cuda NVDEC api call failure");
     ContextStack::pop().unwrap();
 }
@@ -201,7 +202,7 @@ impl<'a> NvDecoder<'a> {
 
         let mut decode_caps = CUVIDDECODECAPS::default();
         decode_caps.eCodecType = video_format.codec;
-        decode_caps.eChromaFormat = video_format.codec;
+        decode_caps.eChromaFormat = video_format.chroma_format;
         decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
         do_ctxpush_cuvidfunc(&self.context, || unsafe {
             cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
