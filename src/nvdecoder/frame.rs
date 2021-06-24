@@ -17,3 +17,12 @@ impl<'a> FrameData<'a> {
         }
     }
 }
+
+impl AsRef<[u8]> for FrameData<'_> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Owned(v) => v,
+            Self::Device(s) => s,
+        }
+    }
+}

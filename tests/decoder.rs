@@ -31,8 +31,20 @@ fn decode_h265() -> Result<()> {
 
     let data = include_bytes!("../resources/test/single_i_frame.hevc");
 
-    let frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
-    println!("frames decoded: {}, video info: {}", frames_decoded, decoder.get_video_info());
+    let start = std::time::Instant::now();
+    let frames_decoded = decoder.decode(
+        data,
+        DecoderPacketFlags::END_OF_PICTURE | DecoderPacketFlags::END_OF_STREAM,
+        0,
+    )?;
+    println!(
+        "frames decoded: {}, in {} seconds. video info: {}",
+        frames_decoded,
+        start.elapsed().as_secs_f64(),
+        decoder.get_video_info()
+    );
+    let frame = decoder.get_frame().unwrap();
+    std::fs::write("out.frame", &frame.data)?;
 
     Ok(())
 }

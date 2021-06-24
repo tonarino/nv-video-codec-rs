@@ -20,7 +20,7 @@ use ffi::{
     CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
 };
 use nv_video_codec_sys as ffi;
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack, CurrentContext};
 use std::{
     collections::VecDeque,
@@ -76,7 +76,7 @@ impl NvDecoderBuilder {
         }
     }
 
-    pub fn build<'a>(self) -> Result<NvDecoder<'a>, NvDecoderError> {
+    pub fn build<'a>(self) -> Result<Box<NvDecoder<'a>>, NvDecoderError> {
         NvDecoder::new(
             self.context,
             self.use_device_frame,
@@ -383,6 +383,7 @@ impl<'a> NvDecoder<'a> {
 
     fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
         println!("Handle picture display");
+        debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
         let mut video_processing_parameters = CUVIDPROCPARAMS::default();
@@ -397,7 +398,9 @@ impl<'a> NvDecoder<'a> {
         let mut src_pitch = 0;
 
         // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work with this
-        ContextStack::push(&self.context).unwrap();
+
+        let unowned = CurrentContext::get_current().unwrap();
+        ContextStack::push(&unowned).unwrap();
         unsafe {
             cuvidMapVideoFrame64(
                 self.decoder,
@@ -587,7 +590,7 @@ impl<'a> NvDecoder<'a> {
         max_width: u32,
         max_height: u32,
         clock_rate: u32,
-    ) -> Result<Self, NvDecoderError> {
+    ) -> Result<Box<Self>, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
             cuvidCtxLockCreate(&mut ctx_lock, context.get_inner() as *mut ffi::CUctx_st)
@@ -598,7 +601,7 @@ impl<'a> NvDecoder<'a> {
         // we create the decoder first with a null parser because the parser needs
         // a reference to the decoder for callbacks, and then create the parser with the reference
         // and then set the parser to the actual instantiated one
-        let mut this = Self {
+        let mut this = Box::new(Self {
             parser: std::ptr::null_mut(),
             context,
             use_device_frame,
@@ -632,7 +635,7 @@ impl<'a> NvDecoder<'a> {
             display_rect: Default::default(),
             surface_height: 0,
             surface_width: 0,
-        };
+        });
 
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
@@ -641,7 +644,7 @@ impl<'a> NvDecoder<'a> {
             ulClockRate: clock_rate,
             ulMaxDisplayDelay: if low_latency { 0 } else { 1 },
 
-            pUserData: &mut this as *mut NvDecoder as *mut c_void,
+            pUserData: &mut *this as *mut NvDecoder as *mut c_void,
             pfnSequenceCallback: Some(handle_video_sequence_proc),
             pfnDecodePicture: Some(handle_picture_decode_proc),
             pfnDisplayPicture: Some(handle_picture_display_proc),
@@ -700,8 +703,25 @@ impl<'a> NvDecoder<'a> {
         Ok(self.n_decoded_frame)
     }
 
+    // inefficient test implementation
+    pub fn get_frame(&mut self) -> Option<Frame> {
+        if self.n_decoded_frame > 0 {
+            let frames_locked = self.frames.lock();
+            self.n_decoded_frame -= 1;
+            match &frames_locked[self.n_decoded_frame_returned as usize] {
+                Frame { timestamp, data: FrameData::Owned(v) } => {
+                    self.n_decoded_frame_returned += 1;
+                    Some(Frame { timestamp: *timestamp, data: FrameData::Owned(v.clone()) })
+                },
+                Frame { timestamp, data: FrameData::Device(v) } => None,
+            }
+        } else {
+            None
+        }
+    }
+
     // TODO(efyang): which implementation to use?
-    // pub fn get_frame<'a>(&'a mut self) -> Option<MappedMutexGuard<'a, Frame>> {
+    // pub fn get_frame(&'a mut self) -> Option<MappedMutexGuard<'a, Frame>> {
     //     if self.n_decoded_frame > 0 {
     //         let frames_locked = self.frames.lock();
     //         self.n_decoded_frame -= 1;
@@ -715,18 +735,18 @@ impl<'a> NvDecoder<'a> {
     // }
 
     // another possible race condition in the original code
-    pub fn get_frame(&'a mut self) -> Option<Box<dyn Deref<Target = Frame<'a>> + 'a>> {
-        if self.n_decoded_frame > 0 {
-            let frames_locked = self.frames.lock();
-            self.n_decoded_frame -= 1;
-            self.n_decoded_frame_returned += 1;
-            Some(Box::new(MutexGuard::map(frames_locked, |frames| {
-                &mut frames[self.n_decoded_frame_returned as usize]
-            })))
-        } else {
-            None
-        }
-    }
+    // pub fn get_frame(&'a mut self) -> Option<Box<dyn Deref<Target = Frame<'a>> + 'a>> {
+    //     if self.n_decoded_frame > 0 {
+    //         let frames_locked = self.frames.lock();
+    //         self.n_decoded_frame -= 1;
+    //         self.n_decoded_frame_returned += 1;
+    //         Some(Box::new(MutexGuard::map(frames_locked, |frames| {
+    //             &mut frames[self.n_decoded_frame_returned as usize]
+    //         })))
+    //     } else {
+    //         None
+    //     }
+    // }
 
     /// Note: the locked/unlocked api is like the following:
     /// If a frame can be used by the decoder, then it is considered unlocked (anything inside of self.frames)
@@ -770,6 +790,10 @@ impl<'a> NvDecoder<'a> {
 
     pub fn get_video_info(&self) -> &str {
         &self.video_info
+    }
+
+    pub fn get_output_format(&self) -> SurfaceFormat {
+        self.output_format
     }
 }
 
