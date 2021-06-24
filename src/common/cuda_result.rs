@@ -1,4 +1,5 @@
-use nv_video_codec_sys::cudaError_enum;
+use ffi::cudaError_enum;
+use nv_video_codec_sys as ffi;
 
 pub type CudaResult<T> = Result<T, CudaError>;
 

@@ -1,4 +1,5 @@
-use nv_video_codec_sys::CUvideopacketflags;
+use ffi::CUvideopacketflags;
+use nv_video_codec_sys as ffi;
 
 bitflags! {
     pub struct DecoderPacketFlags: u32 {

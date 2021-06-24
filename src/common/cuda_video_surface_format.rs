@@ -1,8 +1,10 @@
-use nv_video_codec_sys::cudaVideoSurfaceFormat_enum;
+use ffi::cudaVideoSurfaceFormat_enum;
+use nv_video_codec_sys as ffi;
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
     pub enum CudaVideoSurfaceFormat = cudaVideoSurfaceFormat_enum
+    cvt_err: CudaVideoSurfaceFormatConvertError
     {
         NV12 = cudaVideoSurfaceFormat_NV12
         P016 = cudaVideoSurfaceFormat_P016

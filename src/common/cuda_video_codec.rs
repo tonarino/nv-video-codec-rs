@@ -1,8 +1,10 @@
-use nv_video_codec_sys::cudaVideoCodec_enum;
+use ffi::cudaVideoCodec_enum;
+use nv_video_codec_sys as ffi;
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
     pub enum CudaVideoCodec = cudaVideoCodec_enum
+    cvt_err: CudaVideoCodecConvertError
     {
         MPEG1 = cudaVideoCodec_MPEG1
         MPEG2 = cudaVideoCodec_MPEG2

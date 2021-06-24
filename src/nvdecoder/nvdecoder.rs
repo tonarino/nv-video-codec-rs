@@ -5,8 +5,8 @@ use crate::{
     },
     nvdecoder::FrameData,
 };
-use nv_video_codec_sys::{
-    self, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
+use ffi::{
+    CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, __BindgenBitfieldUnit, cuArray3DCreate_v2, cuMemAllocPitch_v2, cuMemAlloc_v2,
     cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
@@ -19,12 +19,12 @@ use nv_video_codec_sys::{
     CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS,
     CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
 };
+use nv_video_codec_sys as ffi;
 use parking_lot::{Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
-    borrow::BorrowMut,
     collections::VecDeque,
-    mem::MaybeUninit,
+    convert::{TryFrom, TryInto},
     ops::Deref,
     os::raw::{c_int, c_ulong, c_void},
     sync::Arc,
@@ -244,8 +244,8 @@ impl<'a> NvDecoder<'a> {
         }
 
         // eCodec has been set in the constructor (for parser). Here it's set again for potential correction
-        self.codec = video_format.codec.into();
-        self.chroma_format = video_format.chroma_format.into();
+        self.codec = video_format.codec.try_into().unwrap();
+        self.chroma_format = video_format.chroma_format.try_into().unwrap();
         self.bitdepth_minus_8 = video_format.bit_depth_luma_minus8 as i32;
         self.bpp = if self.bitdepth_minus_8 > 0 { 2 } else { 1 };
 
@@ -294,7 +294,7 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.ulWidth = video_format.coded_width as u64;
         video_decode_create_info.ulHeight = video_format.coded_height as u64;
         // AV1 has max width/height of sequence in sequence header
-        if matches!(video_format.codec.into(), CudaVideoCodec::AV1)
+        if matches!(video_format.codec.try_into().unwrap(), CudaVideoCodec::AV1)
             && video_format.seqhdr_data_length > 0
         {
             // dont overwrite if it is already set from cmdline or reconfig.txt
@@ -592,11 +592,8 @@ impl<'a> NvDecoder<'a> {
     ) -> Result<Self, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
-            cuvidCtxLockCreate(
-                &mut ctx_lock,
-                context.get_inner() as *mut nv_video_codec_sys::CUctx_st,
-            )
-            .into_cuda_result()?;
+            cuvidCtxLockCreate(&mut ctx_lock, context.get_inner() as *mut ffi::CUctx_st)
+                .into_cuda_result()?;
             ctx_lock
         };
 
@@ -664,8 +661,7 @@ impl<'a> NvDecoder<'a> {
 
         dbg!(this.parser);
         unsafe {
-            nv_video_codec_sys::cuvidCreateVideoParser(&mut this.parser, &mut params)
-                .into_cuda_result()?;
+            ffi::cuvidCreateVideoParser(&mut this.parser, &mut params).into_cuda_result()?;
         }
         dbg!(this.parser);
 
@@ -785,7 +781,7 @@ impl<'a> Drop for NvDecoder<'a> {
         let session_deinit_start = Instant::now();
         if !self.parser.is_null() {
             unsafe {
-                let err = cuvidDestroyVideoParser(self.parser as nv_video_codec_sys::CUvideoparser);
+                let err = cuvidDestroyVideoParser(self.parser as ffi::CUvideoparser);
                 err.into_cuda_result().expect("Failure on nvdecoder parser destroy");
             }
         }
