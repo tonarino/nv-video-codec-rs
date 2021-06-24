@@ -15,8 +15,7 @@ fn init_decoder() -> Result<()> {
     let context =
         Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
     let decoder =
-        NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::CudaVideoCodec::HEVC)
-            .build()?;
+        NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::Codec::HEVC).build()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -28,8 +27,7 @@ fn decode_h265() -> Result<()> {
     let context =
         Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
     let mut decoder =
-        NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::CudaVideoCodec::HEVC)
-            .build()?;
+        NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::Codec::HEVC).build()?;
 
     let data = include_bytes!("../resources/test/single_i_frame.hevc");
 

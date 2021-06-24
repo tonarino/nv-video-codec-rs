@@ -1,7 +1,7 @@
 use crate::{
     common::{
-        CudaResult, CudaVideoChromaFormat, CudaVideoCodec, CudaVideoCreateFlags,
-        CudaVideoDeinterlaceMode, CudaVideoSurfaceFormat, Dim, IntoCudaResult, Rect,
+        ChromaFormat, Codec, CreateFlags, CudaResult, DeinterlaceMode, Dim, IntoCudaResult, Rect,
+        SurfaceFormat,
     },
     nvdecoder::FrameData,
 };
@@ -36,7 +36,7 @@ use super::{DecoderPacketFlags, Frame, NvDecoderError};
 pub struct NvDecoderBuilder {
     context: Context,
     use_device_frame: bool,
-    codec: CudaVideoCodec,
+    codec: Codec,
     low_latency: bool,
     device_frame_pitched: bool,
     crop_rect: Rect,
@@ -61,7 +61,7 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(clock_rate: u32);
 
-    pub fn new(context: Context, use_device_frame: bool, codec: CudaVideoCodec) -> Self {
+    pub fn new(context: Context, use_device_frame: bool, codec: Codec) -> Self {
         Self {
             context,
             use_device_frame,
@@ -97,9 +97,9 @@ pub struct NvDecoder<'a> {
     decoder: CUvideodecoder,
     context: Context,
     use_device_frame: bool,
-    codec: CudaVideoCodec,
-    chroma_format: CudaVideoChromaFormat,
-    output_format: CudaVideoSurfaceFormat,
+    codec: Codec,
+    chroma_format: ChromaFormat,
+    output_format: SurfaceFormat,
     video_format: CUVIDEOFORMAT,
     device_frame_pitched: bool,
     crop_rect: Rect,
@@ -250,24 +250,21 @@ impl<'a> NvDecoder<'a> {
         self.bpp = if self.bitdepth_minus_8 > 0 { 2 } else { 1 };
 
         // Set the output surface format same as chroma format
-        if matches!(
-            self.chroma_format,
-            CudaVideoChromaFormat::YUV420 | CudaVideoChromaFormat::Monochrome
-        ) {
+        if matches!(self.chroma_format, ChromaFormat::YUV420 | ChromaFormat::Monochrome) {
             self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
-                CudaVideoSurfaceFormat::P016
+                SurfaceFormat::P016
             } else {
-                CudaVideoSurfaceFormat::NV12
+                SurfaceFormat::NV12
             };
-        } else if matches!(self.chroma_format, CudaVideoChromaFormat::YUV444) {
+        } else if matches!(self.chroma_format, ChromaFormat::YUV444) {
             self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
-                CudaVideoSurfaceFormat::YUV444_16bit
+                SurfaceFormat::YUV444_16bit
             } else {
-                CudaVideoSurfaceFormat::YUV444
+                SurfaceFormat::YUV444
             };
-        } else if matches!(self.chroma_format, CudaVideoChromaFormat::YUV422) {
+        } else if matches!(self.chroma_format, ChromaFormat::YUV422) {
             // no 4:2:2 output format supported yet so make 420 default
-            self.output_format = CudaVideoSurfaceFormat::NV12;
+            self.output_format = SurfaceFormat::NV12;
         }
 
         // TODO(efyang) : create safe wrapper over VideoFormat
@@ -279,14 +276,14 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.OutputFormat = self.output_format.into();
         video_decode_create_info.bitDepthMinus8 = video_format.bit_depth_luma_minus8 as u64;
         if video_format.progressive_sequence != 0 {
-            video_decode_create_info.DeinterlaceMode = CudaVideoDeinterlaceMode::Weave.into();
+            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Weave.into();
         } else {
-            video_decode_create_info.DeinterlaceMode = CudaVideoDeinterlaceMode::Adaptive.into();
+            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Adaptive.into();
         }
         video_decode_create_info.ulNumOutputSurfaces = 2;
         // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
         video_decode_create_info.ulCreationFlags = {
-            let cf: u32 = CudaVideoCreateFlags::PreferCUVID.into();
+            let cf: u32 = CreateFlags::PreferCUVID.into();
             cf as u64
         };
         video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
@@ -294,7 +291,7 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.ulWidth = video_format.coded_width as u64;
         video_decode_create_info.ulHeight = video_format.coded_height as u64;
         // AV1 has max width/height of sequence in sequence header
-        if matches!(video_format.codec.try_into().unwrap(), CudaVideoCodec::AV1)
+        if matches!(video_format.codec.try_into().unwrap(), Codec::AV1)
             && video_format.seqhdr_data_length > 0
         {
             // dont overwrite if it is already set from cmdline or reconfig.txt
@@ -556,7 +553,7 @@ impl<'a> NvDecoder<'a> {
         unsafe {
             let op_info = *op_info;
 
-            if op_info.codec == CudaVideoCodec::AV1.into()
+            if op_info.codec == Codec::AV1.into()
                 && op_info.__bindgen_anon_1.av1.operating_points_cnt > 1
             {
                 if self.n_operating_point
@@ -581,7 +578,7 @@ impl<'a> NvDecoder<'a> {
     fn new(
         context: Context,
         use_device_frame: bool,
-        codec: CudaVideoCodec,
+        codec: Codec,
         low_latency: bool,
         device_frame_pitched: bool,
         crop_rect: Rect,
@@ -612,8 +609,8 @@ impl<'a> NvDecoder<'a> {
             max_height,
             ctx_lock,
             bitdepth_minus_8: 0,
-            chroma_format: CudaVideoChromaFormat::YUV420,
-            output_format: CudaVideoSurfaceFormat::NV12,
+            chroma_format: ChromaFormat::YUV420,
+            output_format: SurfaceFormat::NV12,
             video_format: Default::default(),
             video_info: "".to_string(),
             n_decoded_frame: 0,
@@ -752,8 +749,7 @@ impl<'a> NvDecoder<'a> {
 
     pub fn get_width(&self) -> u32 {
         assert!(self.width != 0);
-        if matches!(self.output_format, CudaVideoSurfaceFormat::NV12 | CudaVideoSurfaceFormat::P016)
-        {
+        if matches!(self.output_format, SurfaceFormat::NV12 | SurfaceFormat::P016) {
             (self.width + 1) & !1
         } else {
             self.width
