@@ -1,96 +1,33 @@
 use crate::{
     common::{
-        ChromaFormat, Codec, CreateFlags, CudaResult, DeinterlaceMode, Dim, IntoCudaResult, Rect,
-        SurfaceFormat,
+        ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, IntoCudaResult, Rect, SurfaceFormat,
     },
     nvdecoder::FrameData,
 };
 use ffi::{
-    CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
+    cuArray3DCreate_v2, cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2,
+    cuStreamSynchronize, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
+    cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
+    cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
+    cuvidUnmapVideoFrame64, size_t, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
+    CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
-    CUvideoparser, __BindgenBitfieldUnit, cuArray3DCreate_v2, cuMemAllocPitch_v2, cuMemAlloc_v2,
-    cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
-    cudaVideoCodec_enum::cudaVideoCodec_NV12,
-    cudaVideoSurfaceFormat_enum::{cudaVideoSurfaceFormat_NV12, cudaVideoSurfaceFormat_P016},
-    cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
-    cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
-    cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
-    CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT, CUVIDGETDECODESTATUS,
-    CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS, CUVIDPICPARAMS,
-    CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET, _CUVIDDECODECAPS,
+    CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
+    CUVIDGETDECODESTATUS, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS,
+    CUVIDPICPARAMS, CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET,
 };
 use nv_video_codec_sys as ffi;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use rustacuda::context::{Context, ContextHandle, ContextStack, CurrentContext};
+use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
     collections::VecDeque,
-    convert::{TryFrom, TryInto},
-    ops::Deref,
+    convert::TryInto,
     os::raw::{c_int, c_ulong, c_void},
     sync::Arc,
     time::Instant,
 };
 
 use super::{DecoderPacketFlags, Frame, NvDecoderError};
-
-pub struct NvDecoderBuilder {
-    context: Context,
-    use_device_frame: bool,
-    codec: Codec,
-    low_latency: bool,
-    device_frame_pitched: bool,
-    crop_rect: Rect,
-    resize_dim: Dim,
-    max_width: u32,
-    max_height: u32,
-    clock_rate: u32,
-}
-
-impl NvDecoderBuilder {
-    builder_field_setter!(low_latency: bool);
-
-    builder_field_setter!(device_frame_pitched: bool);
-
-    builder_field_setter!(crop_rect: Rect);
-
-    builder_field_setter!(resize_dim: Dim);
-
-    builder_field_setter!(max_width: u32);
-
-    builder_field_setter!(max_height: u32);
-
-    builder_field_setter!(clock_rate: u32);
-
-    pub fn new(context: Context, use_device_frame: bool, codec: Codec) -> Self {
-        Self {
-            context,
-            use_device_frame,
-            codec,
-            low_latency: false,
-            device_frame_pitched: false,
-            crop_rect: Default::default(),
-            resize_dim: Default::default(),
-            max_width: 0,
-            max_height: 0,
-            clock_rate: 1000,
-        }
-    }
-
-    pub fn build<'a>(self) -> Result<Box<NvDecoder<'a>>, NvDecoderError> {
-        NvDecoder::new(
-            self.context,
-            self.use_device_frame,
-            self.codec,
-            self.low_latency,
-            self.device_frame_pitched,
-            self.crop_rect,
-            self.resize_dim,
-            self.max_width,
-            self.max_height,
-            self.clock_rate,
-        )
-    }
-}
 
 pub struct NvDecoder<'a> {
     parser: CUvideoparser,
@@ -121,7 +58,7 @@ pub struct NvDecoder<'a> {
     frames: Arc<Mutex<VecDeque<Frame<'a>>>>,
     n_pic_num_in_decode_order: [usize; 32],
     n_decode_pic_cnt: usize,
-    n_operating_point: usize,
+    operating_point: usize,
 
     /// output dimensions
     width: u32,
@@ -140,7 +77,6 @@ unsafe extern "C" fn handle_video_sequence_proc(
     decoder: *mut c_void,
     video_format: *mut CUVIDEOFORMAT,
 ) -> c_int {
-    println!("handle_video_sequence_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(video_format)
 }
@@ -151,7 +87,6 @@ unsafe extern "C" fn handle_picture_decode_proc(
     decoder: *mut c_void,
     pic_params: *mut CUVIDPICPARAMS,
 ) -> c_int {
-    println!("handle_picture_decode_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_decode(pic_params)
 }
@@ -162,7 +97,6 @@ unsafe extern "C" fn handle_picture_display_proc(
     decoder: *mut c_void,
     disp_info: *mut CUVIDPARSERDISPINFO,
 ) -> c_int {
-    println!("handle_picture_display_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_display(disp_info)
 }
@@ -173,18 +107,16 @@ unsafe extern "C" fn handle_operating_point_proc(
     decoder: *mut c_void,
     op_info: *mut CUVIDOPERATINGPOINTINFO,
 ) -> c_int {
-    println!("handle_operating_point_proc");
     debug_assert!(!decoder.is_null());
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_ctxpush_cuvidfunc<'a, F, T>(context: &'a Context, mut func: F)
+fn do_within_context<'a, F, T>(context: &'a Context, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
 {
-    let unowned = CurrentContext::get_current().unwrap();
-    ContextStack::push(&unowned).unwrap();
+    ContextStack::push(context).unwrap();
     func().into_cuda_result().expect("Cuda NVDEC api call failure");
     ContextStack::pop().unwrap();
 }
@@ -192,19 +124,28 @@ where
 impl<'a> NvDecoder<'a> {
     // TODO(efyang) : switch these over to result types and just handle the results
     fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
-        println!("Handle video sequence");
         let session_init_start = Instant::now();
 
         let video_format = unsafe { *video_format };
-        self.video_info = format!("Video Input Information:\n{:?}", video_format);
 
         let decode_surface = video_format.min_num_decode_surfaces;
 
+        // TODO(efyang)
+        // for our use cases, we don't need pretty much all of this stuff after we've
+        // initialized properly if we're assuming the same format thereafter
+        // this step takes 3ms, which is unacceptable for repeated usage
+        // we temporarily skip here, this should be changed depending on how we decide
+        // to build this (full featured or tailored to use case)
+        if !(self.decoder.is_null()) {
+            return video_format.min_num_decode_surfaces as i32;
+        }
+
+        self.video_info = format!("Video Input Information:\n{:#?}", video_format);
         let mut decode_caps = CUVIDDECODECAPS::default();
         decode_caps.eCodecType = video_format.codec;
         decode_caps.eChromaFormat = video_format.chroma_format;
         decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
-        do_ctxpush_cuvidfunc(&self.context, || unsafe {
+        do_within_context(&self.context, || unsafe {
             cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
         });
 
@@ -241,7 +182,8 @@ impl<'a> NvDecoder<'a> {
         if self.width != 0 && self.luma_height != 0 && self.chroma_height != 0 {
             // cuvidCreateDecoder() has been called before, and now there's possible config change
             // L229
-            todo!()
+            // TODO(efyang) - technically not needed for our application, but should be done
+            // todo!()
         }
 
         // eCodec has been set in the constructor (for parser). Here it's set again for potential correction
@@ -349,23 +291,26 @@ impl<'a> NvDecoder<'a> {
         self.display_rect.right = video_decode_create_info.display_area.right as usize;
 
         // TODO(efyang) print decoding params
-        self.video_info += &format!("Video Decoding Params:\n{:?}", video_decode_create_info);
+        self.video_info += &format!("Video Decoding Params:\n{:#?}", video_decode_create_info);
 
-        let decoder_ptr = &mut self.decoder;
-        do_ctxpush_cuvidfunc(&self.context, || unsafe {
-            cuvidCreateDecoder(decoder_ptr, &mut video_decode_create_info)
-        });
+        // TODO(efyang)
+        // don't know why this isn't in the original code, but this reduces runtime immensely
+        // (why recreate the decoder if not needed and can just reconfigure?)
+        // this should be cleaned up later with an optional type, along with other things
+        if self.decoder.is_null() {
+            let decoder_ptr = &mut self.decoder;
+            do_within_context(&self.context, || unsafe {
+                cuvidCreateDecoder(decoder_ptr, &mut video_decode_create_info)
+            });
+        }
 
-        println!(
-            "Session Initialization Time: {} seconds",
-            session_init_start.elapsed().as_secs_f64()
-        );
+        println!("Session Initialization Time: {:?}", session_init_start.elapsed());
 
         decode_surface as i32
     }
 
     fn handle_picture_decode(&mut self, pic_params: *mut CUVIDPICPARAMS) -> i32 {
-        println!("Handle picture decode");
+        // NOTE: this function takes basically no time (~100us), no real point of optimizing this
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!pic_params.is_null());
         unsafe {
@@ -374,7 +319,7 @@ impl<'a> NvDecoder<'a> {
         }
         self.n_decode_pic_cnt += 1;
 
-        do_ctxpush_cuvidfunc(&self.context, || unsafe {
+        do_within_context(&self.context, || unsafe {
             cuvidDecodePicture(self.decoder, pic_params)
         });
 
@@ -382,7 +327,6 @@ impl<'a> NvDecoder<'a> {
     }
 
     fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
-        println!("Handle picture display");
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
@@ -397,11 +341,11 @@ impl<'a> NvDecoder<'a> {
         let mut src_frame: CUdeviceptr = 0;
         let mut src_pitch = 0;
 
-        // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work with this
-
-        let unowned = CurrentContext::get_current().unwrap();
-        ContextStack::push(&unowned).unwrap();
+        // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work
+        // here with this
+        ContextStack::push(&self.context).unwrap();
         unsafe {
+            // NOTE: this call takes about 1.6ms (about half the total time of this func)
             cuvidMapVideoFrame64(
                 self.decoder,
                 disp_info.picture_index,
@@ -415,6 +359,7 @@ impl<'a> NvDecoder<'a> {
 
         let mut decode_status = CUVIDGETDECODESTATUS::default();
         let decode_result = unsafe {
+            // NOTE: this call takes negligible time (as one would expect - 2-4us)
             cuvidGetDecodeStatus(self.decoder, disp_info.picture_index, &mut decode_status)
                 .into_cuda_result()
         };
@@ -431,6 +376,7 @@ impl<'a> NvDecoder<'a> {
             );
         }
 
+        // NOTE: this block takes negligible time
         let decoded_frame_ptr: *mut u8;
         {
             let mut frames = self.frames.lock();
@@ -487,6 +433,7 @@ impl<'a> NvDecoder<'a> {
             decoded_frame_ptr = frames[frame_len - 1].data.as_mut().as_mut_ptr();
         }
 
+        // NOTE: memcpys take about 1ms total here
         // Copy luma plane
         let mut m = CUDA_MEMCPY2D::default();
         m.srcMemoryType = CUmemorytype_enum::CU_MEMORYTYPE_DEVICE;
@@ -534,6 +481,7 @@ impl<'a> NvDecoder<'a> {
                 cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
             }
         }
+        // NOTE: this call takes negligible time (about 2us)
         unsafe {
             cuStreamSynchronize(self.stream).into_cuda_result().unwrap();
         }
@@ -541,6 +489,7 @@ impl<'a> NvDecoder<'a> {
         ContextStack::pop().unwrap();
         // timestamp already set earlier
 
+        // NOTE: this call takes negligible time (about 2us)
         unsafe {
             cuvidUnmapVideoFrame64(self.decoder, src_frame).into_cuda_result().unwrap();
         }
@@ -560,10 +509,10 @@ impl<'a> NvDecoder<'a> {
             if op_info.codec == Codec::AV1.into()
                 && op_info.__bindgen_anon_1.av1.operating_points_cnt > 1
             {
-                if self.n_operating_point
+                if self.operating_point
                     >= op_info.__bindgen_anon_1.av1.operating_points_cnt as usize
                 {
-                    self.n_operating_point = 0;
+                    self.operating_point = 0;
                 }
 
                 println!(
@@ -579,7 +528,7 @@ impl<'a> NvDecoder<'a> {
 }
 
 impl<'a> NvDecoder<'a> {
-    fn new(
+    pub fn new(
         context: Context,
         use_device_frame: bool,
         codec: Codec,
@@ -626,7 +575,7 @@ impl<'a> NvDecoder<'a> {
             n_pic_num_in_decode_order: [0; 32],
             n_decode_pic_cnt: 0,
             decoder: std::ptr::null_mut(),
-            n_operating_point: 0,
+            operating_point: 0,
             width: 0,
             luma_height: 0,
             chroma_height: 0,
@@ -660,11 +609,9 @@ impl<'a> NvDecoder<'a> {
             pExtVideoInfo: std::ptr::null_mut(),
         };
 
-        dbg!(this.parser);
         unsafe {
             ffi::cuvidCreateVideoParser(&mut this.parser, &mut params).into_cuda_result()?;
         }
-        dbg!(this.parser);
 
         Ok(this)
     }
@@ -703,50 +650,38 @@ impl<'a> NvDecoder<'a> {
         Ok(self.n_decoded_frame)
     }
 
-    // inefficient test implementation
-    pub fn get_frame(&mut self) -> Option<Frame> {
+    // TODO(efyang): which implementation to use?
+    // inefficient full-copy implementation
+    // pub fn get_frame(&mut self) -> Option<Frame> {
+    //     if self.n_decoded_frame > 0 {
+    //         let frames_locked = self.frames.lock();
+    //         self.n_decoded_frame -= 1;
+    //         match &frames_locked[self.n_decoded_frame_returned as usize] {
+    //             Frame { timestamp, data: FrameData::Owned(v) } => {
+    //                 self.n_decoded_frame_returned += 1;
+    //                 Some(Frame { timestamp: *timestamp, data: FrameData::Owned(v.clone()) })
+    //             },
+    //             Frame { data: FrameData::Device(_), .. } => None,
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // }
+
+    // Another possible race condition in the original code here
+    // should be solved with the use of the mutexguard
+    pub fn get_frame(&mut self) -> Option<MappedMutexGuard<'_, Frame<'a>>> {
         if self.n_decoded_frame > 0 {
             let frames_locked = self.frames.lock();
             self.n_decoded_frame -= 1;
-            match &frames_locked[self.n_decoded_frame_returned as usize] {
-                Frame { timestamp, data: FrameData::Owned(v) } => {
-                    self.n_decoded_frame_returned += 1;
-                    Some(Frame { timestamp: *timestamp, data: FrameData::Owned(v.clone()) })
-                },
-                Frame { timestamp, data: FrameData::Device(v) } => None,
-            }
+            self.n_decoded_frame_returned += 1;
+            Some(MutexGuard::map(frames_locked, |frames| {
+                &mut frames[self.n_decoded_frame_returned - 1 as usize]
+            }))
         } else {
             None
         }
     }
-
-    // TODO(efyang): which implementation to use?
-    // pub fn get_frame(&'a mut self) -> Option<MappedMutexGuard<'a, Frame>> {
-    //     if self.n_decoded_frame > 0 {
-    //         let frames_locked = self.frames.lock();
-    //         self.n_decoded_frame -= 1;
-    //         self.n_decoded_frame_returned += 1;
-    //         Some(MutexGuard::map(frames_locked, |frames| {
-    //             &mut frames[self.n_decoded_frame_returned as usize]
-    //         }))
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    // another possible race condition in the original code
-    // pub fn get_frame(&'a mut self) -> Option<Box<dyn Deref<Target = Frame<'a>> + 'a>> {
-    //     if self.n_decoded_frame > 0 {
-    //         let frames_locked = self.frames.lock();
-    //         self.n_decoded_frame -= 1;
-    //         self.n_decoded_frame_returned += 1;
-    //         Some(Box::new(MutexGuard::map(frames_locked, |frames| {
-    //             &mut frames[self.n_decoded_frame_returned as usize]
-    //         })))
-    //     } else {
-    //         None
-    //     }
-    // }
 
     /// Note: the locked/unlocked api is like the following:
     /// If a frame can be used by the decoder, then it is considered unlocked (anything inside of self.frames)
@@ -775,6 +710,11 @@ impl<'a> NvDecoder<'a> {
         } else {
             self.width
         }
+    }
+
+    pub fn get_height(&self) -> u32 {
+        assert!(self.luma_height != 0);
+        return self.luma_height;
     }
 
     pub fn get_frame_size(&self) -> u32 {
@@ -829,9 +769,6 @@ impl<'a> Drop for NvDecoder<'a> {
             let err = cuvidCtxLockDestroy(self.ctx_lock);
             err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");
         }
-        println!(
-            "Session Deinitialization Time: {} seconds",
-            session_deinit_start.elapsed().as_secs_f64()
-        );
+        println!("Session Deinitialization Time: {:?}", session_deinit_start.elapsed());
     }
 }
