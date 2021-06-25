@@ -5,12 +5,11 @@ use crate::{
     nvdecoder::FrameData,
 };
 use ffi::{
-    cuArray3DCreate_v2, cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2,
-    cuStreamSynchronize, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
-    cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
-    cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
-    cuvidUnmapVideoFrame64, size_t, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
-    CUvideodecoder,
+    cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
+    cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
+    cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
+    cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
+    CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
     CUVIDGETDECODESTATUS, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS,
@@ -388,19 +387,21 @@ impl<'a> NvDecoder<'a> {
                 if self.use_device_frame {
                     let mut frame_data_device_ptr: CUdeviceptr = 0;
                     if self.device_frame_pitched {
+                        // TODO(efyang): this should be a specialized type, pitched allocation is not like a normal array
                         // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
+                        unsafe {
+                            cuMemAllocPitch_v2(
+                                &mut frame_data_device_ptr,
+                                &mut self.device_frame_pitch,
+                                (self.get_width() * self.bpp as u32) as size_t,
+                                (self.luma_height + self.chroma_height * self.num_chroma_planes)
+                                    as size_t,
+                                16,
+                            )
+                            .into_cuda_result()
+                            .unwrap();
+                        }
                         todo!();
-                        // unsafe {
-                        //     cuMemAllocPitch_v2(
-                        //         &mut frame_data_device_ptr,
-                        //         &mut self.device_frame_pitch,
-                        //         (self.get_width() * self.bpp as u32) as size_t,
-                        //         (self.luma_height + self.chroma_height * self.num_chroma_planes)
-                        //             as size_t,
-                        //         16,
-                        //     )
-                        //     .into_cuda_result()?;
-                        // }
                     } else {
                         unsafe {
                             cuMemAlloc_v2(&mut frame_data_device_ptr, self.get_frame_size() as u64)
