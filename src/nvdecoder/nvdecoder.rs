@@ -345,6 +345,19 @@ impl<'a> NvDecoder<'a> {
         ContextStack::push(&self.context).unwrap();
         unsafe {
             // NOTE: this call takes about 1.6ms (about half the total time of this func)
+            // TODO(efyang): optimization in final implementation
+            // from https://docs.nvidia.com/video-technologies/video-codec-sdk/nvdec-video-decoder-api-prog-guide/#preparing-the-decoded-frame-for-further-processing
+            // When using NVIDIA parser from NVDECODE API, the application can
+            // implement a producer-consumer queue between decoding thread (as producer)
+            // and mapping thread (as consumer). The queue can contain picture indexes
+            // (or other unique identifiers) for frames being decoded. Parser can run on
+            // decoding thread. Decoding thread can add the picture index to the queue in
+            // display callback and return immediately from callback to continue decoding
+            // subsequent frames as they become available. On the other side, mapping thread
+            // will monitor the queue. If it sees the queue has non-zero length, it will dequeue
+            // the entry and call cuvidMapVideoFrame(…) with nPicIdx as the picture index.
+            // Decoding thread must ensure to not reuse the corresponding decode picture buffer
+            // for storing the decoded output until its entry is consumed and freed by mapping thread.
             cuvidMapVideoFrame64(
                 self.decoder,
                 disp_info.picture_index,
@@ -650,24 +663,6 @@ impl<'a> NvDecoder<'a> {
 
         Ok(self.n_decoded_frame)
     }
-
-    // TODO(efyang): which implementation to use?
-    // inefficient full-copy implementation
-    // pub fn get_frame(&mut self) -> Option<Frame> {
-    //     if self.n_decoded_frame > 0 {
-    //         let frames_locked = self.frames.lock();
-    //         self.n_decoded_frame -= 1;
-    //         match &frames_locked[self.n_decoded_frame_returned as usize] {
-    //             Frame { timestamp, data: FrameData::Owned(v) } => {
-    //                 self.n_decoded_frame_returned += 1;
-    //                 Some(Frame { timestamp: *timestamp, data: FrameData::Owned(v.clone()) })
-    //             },
-    //             Frame { data: FrameData::Device(_), .. } => None,
-    //         }
-    //     } else {
-    //         None
-    //     }
-    // }
 
     // Another possible race condition in the original code here
     // should be solved with the use of the mutexguard
