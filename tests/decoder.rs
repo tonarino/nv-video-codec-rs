@@ -131,6 +131,9 @@ fn run_torture_test(
         let _ = decoder.get_frame().unwrap();
         timestamp += 1;
         total_frames_decoded += frames_decoded;
+        if total_frames_decoded % 1000 == 0 {
+            info_ctx!(test_name, "Decoded {} frames so far...", total_frames_decoded);
+        }
     }
 
     let time = start.elapsed();

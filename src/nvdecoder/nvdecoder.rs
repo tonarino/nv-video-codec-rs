@@ -49,14 +49,14 @@ pub struct NvDecoder<'a> {
     display_rect: Rect,
     device_frame_pitch: size_t,
 
-    n_decoded_frame: usize,
-    n_decoded_frame_returned: usize,
-    n_frame_alloc: usize,
+    decoded_frames: usize,
+    decoded_frames_returned: usize,
+    allocated_frames: usize,
     stream: CUstream,
     /// need mutex to cover callbacks
     frames: Arc<Mutex<VecDeque<Frame<'a>>>>,
-    n_pic_num_in_decode_order: [usize; 32],
-    n_decode_pic_cnt: usize,
+    picture_decode_index_mapping: [usize; 32],
+    decoded_pictures: usize,
     operating_point: usize,
 
     /// output dimensions
@@ -313,10 +313,10 @@ impl<'a> NvDecoder<'a> {
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!pic_params.is_null());
         unsafe {
-            self.n_pic_num_in_decode_order[(*pic_params).CurrPicIdx as usize] =
-                self.n_decode_pic_cnt;
+            self.picture_decode_index_mapping[(*pic_params).CurrPicIdx as usize] =
+                self.decoded_pictures;
         }
-        self.n_decode_pic_cnt += 1;
+        self.decoded_pictures += 1;
 
         do_within_context(&self.context, || unsafe {
             cuvidDecodePicture(self.decoder, pic_params)
@@ -384,7 +384,7 @@ impl<'a> NvDecoder<'a> {
         {
             eprintln!(
                 "Decode Error occurred for picture {}",
-                self.n_pic_num_in_decode_order[disp_info.picture_index as usize]
+                self.picture_decode_index_mapping[disp_info.picture_index as usize]
             );
         }
 
@@ -392,10 +392,10 @@ impl<'a> NvDecoder<'a> {
         let decoded_frame_ptr: *mut u8;
         {
             let mut frames = self.frames.lock();
-            self.n_decoded_frame += 1;
-            if self.n_decoded_frame > frames.len() {
+            self.decoded_frames += 1;
+            if self.decoded_frames > frames.len() {
                 // Not enough frames in stock
-                self.n_frame_alloc += 1;
+                self.allocated_frames += 1;
                 let frame_data: &mut [u8];
                 if self.use_device_frame {
                     let mut frame_data_device_ptr: CUdeviceptr = 0;
@@ -580,14 +580,14 @@ impl<'a> NvDecoder<'a> {
             output_format: SurfaceFormat::NV12,
             video_format: Default::default(),
             video_info: "".to_string(),
-            n_decoded_frame: 0,
-            n_decoded_frame_returned: 0,
-            n_frame_alloc: 0,
+            decoded_frames: 0,
+            decoded_frames_returned: 0,
+            allocated_frames: 0,
             device_frame_pitch: 0,
             stream: std::ptr::null_mut(),
             frames: Arc::new(Mutex::new(VecDeque::new())),
-            n_pic_num_in_decode_order: [0; 32],
-            n_decode_pic_cnt: 0,
+            picture_decode_index_mapping: [0; 32],
+            decoded_pictures: 0,
             decoder: std::ptr::null_mut(),
             operating_point: 0,
             width: 0,
@@ -640,8 +640,8 @@ impl<'a> NvDecoder<'a> {
         flags: DecoderPacketFlags,
         timestamp: i64,
     ) -> Result<usize, NvDecoderError> {
-        self.n_decoded_frame = 0;
-        self.n_decoded_frame_returned = 0;
+        self.decoded_frames = 0;
+        self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
             flags: (flags as u32 | CUVID_PKT_TIMESTAMP as u32) as c_ulong,
@@ -661,18 +661,18 @@ impl<'a> NvDecoder<'a> {
 
         self.stream = std::ptr::null_mut();
 
-        Ok(self.n_decoded_frame)
+        Ok(self.decoded_frames)
     }
 
     // Another possible race condition in the original code here
     // should be solved with the use of the mutexguard
     pub fn get_frame(&mut self) -> Option<MappedMutexGuard<'_, Frame<'a>>> {
-        if self.n_decoded_frame > 0 {
+        if self.decoded_frames > 0 {
             let frames_locked = self.frames.lock();
-            self.n_decoded_frame -= 1;
-            self.n_decoded_frame_returned += 1;
+            self.decoded_frames -= 1;
+            self.decoded_frames_returned += 1;
             Some(MutexGuard::map(frames_locked, |frames| {
-                &mut frames[self.n_decoded_frame_returned - 1 as usize]
+                &mut frames[self.decoded_frames_returned - 1 as usize]
             }))
         } else {
             None
@@ -684,9 +684,9 @@ impl<'a> NvDecoder<'a> {
     /// A frame is locked when it cannot be used by the decoder (it will be removed from the internal framebuffer)
     /// In this way, one can return used frames to the decoder by unlocking them to avoid excessive memory allocations.
     pub fn get_locked_frame(&mut self) -> Option<Frame> {
-        if self.n_decoded_frame > 0 {
+        if self.decoded_frames > 0 {
             let mut frames_locked = self.frames.lock();
-            self.n_decoded_frame -= 1;
+            self.decoded_frames -= 1;
             frames_locked.pop_front()
         } else {
             None
