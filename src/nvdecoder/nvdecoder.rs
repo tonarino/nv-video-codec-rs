@@ -122,6 +122,10 @@ where
 
 impl<'a> NvDecoder<'a> {
     // TODO(efyang) : switch these over to result types and just handle the results
+    // also potentially have special struct for each return type for these callbacks and translate them
+    /* Return value from HandleVideoSequence() are interpreted as   :
+     *  0: fail, 1: succeeded, > 1: override dpb size of parser (set by CUVIDPARSERPARAMS::ulMaxNumDecodeSurfaces while creating parser)
+     */
     fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
         let session_init_start = Instant::now();
 
@@ -308,6 +312,9 @@ impl<'a> NvDecoder<'a> {
         decode_surface as i32
     }
 
+    /* Return value from HandlePictureDecode() are interpreted as:
+     *  0: fail, >=1: succeeded
+     */
     fn handle_picture_decode(&mut self, pic_params: *mut CUVIDPICPARAMS) -> i32 {
         // NOTE: this function takes basically no time (~100us), no real point of optimizing this
         debug_assert!(!self.decoder.is_null());
@@ -325,6 +332,9 @@ impl<'a> NvDecoder<'a> {
         return 1;
     }
 
+    /* Return value from HandlePictureDisplay() are interpreted as:
+     *  0: fail, >=1: succeeded
+     */
     fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
@@ -683,7 +693,7 @@ impl<'a> NvDecoder<'a> {
     /// If a frame can be used by the decoder, then it is considered unlocked (anything inside of self.frames)
     /// A frame is locked when it cannot be used by the decoder (it will be removed from the internal framebuffer)
     /// In this way, one can return used frames to the decoder by unlocking them to avoid excessive memory allocations.
-    pub fn get_locked_frame(&mut self) -> Option<Frame> {
+    pub fn get_locked_frame(&mut self) -> Option<Frame<'a>> {
         if self.decoded_frames > 0 {
             let mut frames_locked = self.frames.lock();
             self.decoded_frames -= 1;
@@ -693,7 +703,7 @@ impl<'a> NvDecoder<'a> {
         }
     }
 
-    pub fn unlock_frame(&'a mut self, mut frame: Frame<'a>) {
+    pub fn unlock_frame(&mut self, mut frame: Frame<'a>) {
         let mut frames_locked = self.frames.lock();
         frame.timestamp = 0;
         frames_locked.push_back(frame);

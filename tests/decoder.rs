@@ -6,6 +6,8 @@ extern crate simple_logger;
 #[macro_use]
 mod utils;
 
+use std::time::Duration;
+
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -46,11 +48,12 @@ fn run_basic_decode(
             .build()?;
 
     let start = std::time::Instant::now();
-    let frames_decoded = decoder.decode(
-        data,
-        DecoderPacketFlags::END_OF_PICTURE | DecoderPacketFlags::END_OF_STREAM,
-        0,
-    )?;
+    let mut frames_decoded = 0;
+    let mut i = 0;
+    while i < 3 && frames_decoded == 0 {
+        frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
+        i += 1;
+    }
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
@@ -111,6 +114,8 @@ fn run_torture_test(
     expected_width: u32,
     expected_height: u32,
     use_device_frame: bool,
+    use_locking: bool,
+    frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
@@ -118,25 +123,43 @@ fn run_torture_test(
         NvDecoderBuilder::new(context, use_device_frame, nv_video_codec_rs::common::Codec::HEVC)
             .build()?;
 
-    let start = std::time::Instant::now();
+    let mut total_time = Duration::from_millis(0);
+    let mut blocked_time = Duration::from_millis(0);
     let mut timestamp = 0;
     let mut total_frames_decoded = 0;
     for _ in 0..NUM_TORTURE_FRAMES {
-        let frames_decoded = decoder.decode(
-            data,
-            DecoderPacketFlags::END_OF_PICTURE | DecoderPacketFlags::END_OF_STREAM,
-            timestamp,
-        )?;
+        if let Some(frame_rate) = frame_rate {
+            std::thread::sleep(Duration::from_secs_f64(1.0 / frame_rate));
+        }
+        let start = std::time::Instant::now();
+        let mut frames_decoded = 0;
+        let mut i = 0;
+        while i < 3 && frames_decoded == 0 {
+            frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, timestamp)?;
+            i += 1;
+        }
 
-        let _ = decoder.get_frame().unwrap();
+        if !use_locking {
+            let _ = decoder.get_frame().unwrap();
+        } else {
+            let frame = decoder.get_locked_frame().unwrap();
+            decoder.unlock_frame(frame);
+        }
+        total_time += start.elapsed();
+        blocked_time += start.elapsed();
+
         timestamp += 1;
         total_frames_decoded += frames_decoded;
         if total_frames_decoded % 1000 == 0 {
-            info_ctx!(test_name, "Decoded {} frames so far...", total_frames_decoded);
+            info_ctx!(
+                test_name,
+                "Decoded {} frames so far, average time/frame: {:?}",
+                total_frames_decoded,
+                blocked_time / 1000
+            );
+            blocked_time = Duration::from_millis(0);
         }
     }
-
-    let time = start.elapsed();
 
     info_ctx!(
         test_name,
@@ -151,24 +174,44 @@ fn run_torture_test(
 
     info_ctx!(
         test_name,
-        "frames decoded: {}, in {:?}, avg time per frame: {:?}",
+        "frames decoded: {}, in {:?}, avg time/frame in past 1000 frames: {:?}",
         total_frames_decoded,
-        time,
-        time / NUM_TORTURE_FRAMES as u32,
+        total_time,
+        total_time / NUM_TORTURE_FRAMES as u32,
     );
 
     Ok(())
 }
 
+// TODO(efyang): change some of these to benchmarks?
 #[test]
 fn decode_h265_3k_basic_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false)
+    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, false, None)
 }
 
-// TODO(efyang): use log for cleaner test output
 #[test]
 fn decode_h265_3k_device_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true)
+    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, false, None)
+}
+
+#[test]
+fn decode_h265_3k_device_framelock_torture() -> Result<()> {
+    let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
+    run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, true, None)
+}
+
+#[test]
+fn decode_h265_3k_device_torture_60fps() -> Result<()> {
+    let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
+    run_torture_test(
+        "decode_h265_3k_device_torture_60fps",
+        data,
+        3088,
+        2076,
+        true,
+        false,
+        Some(60.0),
+    )
 }
