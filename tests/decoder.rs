@@ -34,6 +34,9 @@ fn init_decoder() -> Result<()> {
     Ok(())
 }
 
+// TODO(efyang) make this behaviour configurable and part of the library
+// From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
+const DECODE_TRIES: usize = 3;
 fn run_basic_decode(
     test_name: &str,
     data: &[u8],
@@ -50,7 +53,7 @@ fn run_basic_decode(
     let start = std::time::Instant::now();
     let mut frames_decoded = 0;
     let mut i = 0;
-    while i < 3 && frames_decoded == 0 {
+    while i < DECODE_TRIES && frames_decoded == 0 {
         frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
         i += 1;
     }
@@ -133,8 +136,11 @@ fn run_torture_test(
         }
         let start = std::time::Instant::now();
         let mut frames_decoded = 0;
+
+        // TODO(efyang) make this behaviour configurable and part of the library
+        // From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
         let mut i = 0;
-        while i < 3 && frames_decoded == 0 {
+        while i < DECODE_TRIES && frames_decoded == 0 {
             frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, timestamp)?;
             i += 1;
         }
