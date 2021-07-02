@@ -160,7 +160,7 @@ impl NvEncoder {
         };
 
         let mut encoder_handle: *mut EncoderHandle = std::ptr::null_mut();
-        let encoder_handle_ptr: *mut *mut EncoderHandle = unsafe { &mut encoder_handle };
+        let encoder_handle_ptr: *mut *mut EncoderHandle = &mut encoder_handle;
 
         unsafe {
             enc_api.nvEncOpenEncodeSessionEx.unwrap()(
