@@ -1,11 +1,12 @@
-pub mod cuda_result;
-pub mod cuda_video_codec;
-pub mod dim;
-pub mod rect;
 #[macro_use]
 mod macros;
 
+pub mod cuda_result;
+pub mod types;
+
 pub use cuda_result::*;
-pub use cuda_video_codec::*;
-pub use dim::*;
-pub use rect::*;
+pub use types::{
+    ChromaFormat, ChromaFormatConvertError, Codec, CodecConvertError, CreateFlags,
+    CreateFlagsConvertError, DeinterlaceMode, DeinterlaceModeConvertError, Dim, Rect,
+    SurfaceFormat, SurfaceFormatConvertError,
+};
