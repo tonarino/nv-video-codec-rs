@@ -5,25 +5,14 @@ extern crate simple_logger;
 #[path = "utils.rs"]
 #[macro_use]
 mod utils;
+use utils::init_cuda_ctx;
 
 use std::time::Duration;
 
-use rustacuda::{
-    context::{Context, ContextFlags},
-    device::Device,
-};
 use simple_logger::SimpleLogger;
 
 use anyhow::Result;
 use nv_video_codec_rs::nvdecoder::{DecoderPacketFlags, NvDecoderBuilder};
-
-fn init_cuda_ctx() -> Result<Context> {
-    rustacuda::init(rustacuda::CudaFlags::empty())?;
-    let device = Device::get_device(0)?;
-    let context =
-        Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
-    Ok(context)
-}
 
 #[test]
 fn init_decoder() -> Result<()> {

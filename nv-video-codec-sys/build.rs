@@ -70,6 +70,7 @@ fn main() {
         .constified_enum_module("cudaVideoCreateFlags_enum")
         .constified_enum_module("cuvidDecodeStatus_enum")
         .constified_enum_module("CUmemorytype_enum")
+        .constified_enum_module("_NV_ENC_BUFFER_FORMAT")
         .rustified_enum(".*")
         .derive_default(true)
         .allowlist_var("(?i)(.*cu.*|.*nv.*)")

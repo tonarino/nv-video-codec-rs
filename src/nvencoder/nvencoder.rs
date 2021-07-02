@@ -6,6 +6,8 @@ use nv_video_codec_sys::{
     NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
 };
 
+use super::{BufferFormat, IntoNvEncResult, NvEncError, NvEncoderError};
+
 const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
 }
@@ -13,73 +15,8 @@ const fn nvenc_api_struct_version(version: u32) -> u32 {
 const NV_ENCODE_API_FUNCTION_LIST_VERSION: u32 = nvenc_api_struct_version(2);
 const NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER: u32 = nvenc_api_struct_version(1);
 
-pub enum Error {
-    NoEncodeDevice,
-    UnsupportedDevice,
-    InvalidEncoderDevice,
-    InalidDevice,
-    DeviceNoLongerExists,
-    InvalidPointer,
-    InvalidEvent,
-    InvalidParam,
-    InvalidCall,
-    OutOfMemory,
-    EncoderNotInitialized,
-    UnsupportedParam,
-    LockBusy,
-    NotEnoughBuffer,
-    InvalidVersion,
-    MapFailed,
-    NeedMoreInput,
-    EncoderBusy,
-    EventNotRegistered,
-    ErrGeneric,
-    IncompatibleClientKey,
-    Unimplemented,
-    ResourceRegisterFailed,
-    ResourceNotRegistered,
-    ResourceNotMapped,
-}
-
-trait IntoResult {
-    fn into_result(self) -> Result<(), Error>;
-}
-
-impl IntoResult for NVENCSTATUS {
-    fn into_result(self) -> Result<(), Error> {
-        match self {
-            NVENCSTATUS::NV_ENC_SUCCESS => Ok(()),
-            NVENCSTATUS::NV_ENC_ERR_NO_ENCODE_DEVICE => Err(Error::NoEncodeDevice),
-            NVENCSTATUS::NV_ENC_ERR_UNSUPPORTED_DEVICE => Err(Error::UnsupportedDevice),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_ENCODERDEVICE => Err(Error::InvalidEncoderDevice),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_DEVICE => Err(Error::InalidDevice),
-            NVENCSTATUS::NV_ENC_ERR_DEVICE_NOT_EXIST => Err(Error::DeviceNoLongerExists),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_PTR => Err(Error::InvalidPointer),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_EVENT => Err(Error::InvalidEvent),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_PARAM => Err(Error::InvalidParam),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_CALL => Err(Error::InvalidCall),
-            NVENCSTATUS::NV_ENC_ERR_OUT_OF_MEMORY => Err(Error::OutOfMemory),
-            NVENCSTATUS::NV_ENC_ERR_ENCODER_NOT_INITIALIZED => Err(Error::EncoderNotInitialized),
-            NVENCSTATUS::NV_ENC_ERR_UNSUPPORTED_PARAM => Err(Error::UnsupportedParam),
-            NVENCSTATUS::NV_ENC_ERR_LOCK_BUSY => Err(Error::LockBusy),
-            NVENCSTATUS::NV_ENC_ERR_NOT_ENOUGH_BUFFER => Err(Error::NotEnoughBuffer),
-            NVENCSTATUS::NV_ENC_ERR_INVALID_VERSION => Err(Error::InvalidVersion),
-            NVENCSTATUS::NV_ENC_ERR_MAP_FAILED => Err(Error::MapFailed),
-            NVENCSTATUS::NV_ENC_ERR_NEED_MORE_INPUT => Err(Error::NeedMoreInput),
-            NVENCSTATUS::NV_ENC_ERR_ENCODER_BUSY => Err(Error::EncoderBusy),
-            NVENCSTATUS::NV_ENC_ERR_EVENT_NOT_REGISTERD => Err(Error::EventNotRegistered),
-            NVENCSTATUS::NV_ENC_ERR_GENERIC => Err(Error::ErrGeneric),
-            NVENCSTATUS::NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY => Err(Error::IncompatibleClientKey),
-            NVENCSTATUS::NV_ENC_ERR_UNIMPLEMENTED => Err(Error::Unimplemented),
-            NVENCSTATUS::NV_ENC_ERR_RESOURCE_REGISTER_FAILED => Err(Error::ResourceRegisterFailed),
-            NVENCSTATUS::NV_ENC_ERR_RESOURCE_NOT_REGISTERED => Err(Error::ResourceNotRegistered),
-            NVENCSTATUS::NV_ENC_ERR_RESOURCE_NOT_MAPPED => Err(Error::ResourceNotMapped),
-        }
-    }
-}
-
 #[repr(C)]
-struct EncoderHandle {
+pub(super) struct EncoderHandle {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
@@ -98,18 +35,18 @@ pub struct Device {
 }
 
 #[repr(C)]
-struct Input {
+pub(super) struct Input {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
 pub struct NvEncoder {
-    motion_estimation_only: bool,
+    pub(super) motion_estimation_only: bool,
     output_in_video_memory: bool,
-    encoder_handle: *mut EncoderHandle, // Originally a void pointer
+    pub(super) encoder_handle: *mut EncoderHandle, // Originally a void pointer
     nv_encode_api_function_list: NV_ENCODE_API_FUNCTION_LIST,
-    input_frames: Vec<NvEncInputFrame>,
-    registered_resources: Vec<NV_ENC_REGISTERED_PTR>,
+    pub(super) input_frames: Vec<NvEncInputFrame>,
+    pub(super) registered_resources: Vec<NV_ENC_REGISTERED_PTR>,
     reference_frames: Vec<NvEncInputFrame>,
     registered_resources_for_reference: Vec<NV_ENC_REGISTERED_PTR>,
     mapped_input_buffers: Vec<NV_ENC_INPUT_PTR>,
@@ -121,7 +58,7 @@ pub struct NvEncoder {
     output_delay: i32,
     width: u32,
     height: u32,
-    buffer_format: NV_ENC_BUFFER_FORMAT,
+    buffer_format: BufferFormat,
     device: *mut Device, // Originally a void pointer
     device_type: NV_ENC_DEVICE_TYPE,
     initialize_params: NV_ENC_INITIALIZE_PARAMS,
@@ -140,15 +77,15 @@ impl NvEncoder {
         device: *mut Device,
         width: u32,
         height: u32,
-        buffer_format: NV_ENC_BUFFER_FORMAT,
+        buffer_format: BufferFormat,
         extra_output_delay: u32,
         motion_estimation_only: bool,
         output_in_video_memory: bool,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, NvEncoderError> {
         let enc_api = Self::load_nv_enc_api()?;
 
         if enc_api.nvEncOpenEncodeSession.is_none() {
-            return Err(Error::NoEncodeDevice);
+            return Err(NvEncError::NoEncodeDevice.into());
         }
 
         let mut encode_session_ex_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
@@ -167,7 +104,7 @@ impl NvEncoder {
                 &mut encode_session_ex_params as *mut _,
                 encoder_handle_ptr as *mut _,
             )
-            .into_result()?;
+            .into_nvenc_result()?;
         }
 
         Ok(Self {
@@ -270,7 +207,7 @@ impl NvEncoder {
 
     // Protected
 
-    fn is_hw_encoder_initialized() {
+    pub(super) fn is_hw_encoder_initialized(&mut self) -> bool {
         unimplemented!()
     }
 
@@ -278,7 +215,7 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn unregister_input_resources() {
+    pub(super) fn unregister_input_resources(&mut self) {
         unimplemented!()
     }
 
@@ -327,15 +264,15 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn load_nv_enc_api() -> Result<NV_ENCODE_API_FUNCTION_LIST, Error> {
+    fn load_nv_enc_api() -> Result<NV_ENCODE_API_FUNCTION_LIST, NvEncoderError> {
         let mut version = 0u32;
         let current_version = (NVENCAPI_MAJOR_VERSION << 4) | NVENCAPI_MINOR_VERSION;
         unsafe {
-            NvEncodeAPIGetMaxSupportedVersion(&mut version as *mut _).into_result()?;
+            NvEncodeAPIGetMaxSupportedVersion(&mut version as *mut _).into_nvenc_result()?;
         }
 
         if current_version > version {
-            return Err(Error::InvalidVersion);
+            return Err(NvEncError::InvalidVersion.into());
         }
 
         let mut nvenc_api = NV_ENCODE_API_FUNCTION_LIST {
@@ -344,7 +281,7 @@ impl NvEncoder {
         };
 
         unsafe {
-            NvEncodeAPICreateInstance(&mut nvenc_api as *mut _).into_result()?;
+            NvEncodeAPICreateInstance(&mut nvenc_api as *mut _).into_nvenc_result()?;
         }
 
         Ok(nvenc_api)
@@ -377,33 +314,6 @@ impl NvEncoder {
     fn flush_encoder() {
         unimplemented!()
     }
-}
-
-// Static functions
-impl NvEncoder {
-    pub fn get_chroma_sub_plane_offsets() {
-        unimplemented!()
-    }
-
-    pub fn get_chroma_pitch() {
-        unimplemented!()
-    }
-
-    pub fn get_num_chroma_planes() {
-        unimplemented!()
-    }
-
-    pub fn get_chroma_width_in_bytes() {
-        unimplemented!()
-    }
-
-    pub fn get_chroma_height() {
-        unimplemented!()
-    }
-
-    pub fn get_width_in_bytes() {
-        unimplemented!()
-    }
 
     pub fn get_encoder_buffer_count() {
         unimplemented!()
@@ -414,8 +324,8 @@ impl Drop for NvEncoder {
     fn drop(&mut self) {}
 }
 
-struct NvEncInputFrame {
-    input_ptr: *mut Input, // Originally a void pointer
+pub(super) struct NvEncInputFrame {
+    pub(super) input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],
     num_chroma_planes: u32,
     pitch: u32,

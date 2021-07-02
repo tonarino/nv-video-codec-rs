@@ -5,6 +5,7 @@ extern crate thiserror;
 #[macro_use]
 extern crate bitflags;
 
+extern crate gl;
 extern crate rustacuda;
 
 extern crate rustacuda_core;
