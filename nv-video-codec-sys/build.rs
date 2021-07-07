@@ -77,6 +77,7 @@ fn main() {
         .allowlist_type("(?i)(.*cu.*|.*nv.*)")
         .allowlist_function("(?i)(.*cu.*|.*nv.*)")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .derive_partialeq(true)
         .generate()
         .expect("Unable to generate bindings");
 
