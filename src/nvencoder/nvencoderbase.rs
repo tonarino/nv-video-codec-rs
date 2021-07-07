@@ -1,12 +1,17 @@
+use std::marker::PhantomData;
+
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, NVENCAPI_MAJOR_VERSION,
     NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENCSTATUS, NV_ENCODE_API_FUNCTION_LIST,
     NV_ENC_BUFFER_FORMAT, NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS,
-    NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
-    NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
+    NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE,
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_REGISTERED_PTR,
 };
 
-use super::{BufferFormat, IntoNvEncResult, NvEncError, NvEncoderError};
+use super::{
+    resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
+    NvEncoderError,
+};
 
 const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -40,14 +45,17 @@ pub(super) struct Input {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
-pub struct NvEncoder {
+pub(super) struct NvEncoderBase<T>
+where
+    T: NvEncoderResourceManager + ?Sized,
+{
     pub(super) motion_estimation_only: bool,
     output_in_video_memory: bool,
     pub(super) encoder_handle: *mut EncoderHandle, // Originally a void pointer
     nv_encode_api_function_list: NV_ENCODE_API_FUNCTION_LIST,
     pub(super) input_frames: Vec<NvEncInputFrame>,
     pub(super) registered_resources: Vec<NV_ENC_REGISTERED_PTR>,
-    reference_frames: Vec<NvEncInputFrame>,
+    pub(super) reference_frames: Vec<NvEncInputFrame>,
     registered_resources_for_reference: Vec<NV_ENC_REGISTERED_PTR>,
     mapped_input_buffers: Vec<NV_ENC_INPUT_PTR>,
     mapped_ref_buffers: Vec<NV_ENC_INPUT_PTR>,
@@ -69,9 +77,13 @@ pub struct NvEncoder {
     motion_vector_data_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
     max_encode_width: u32,
     max_encode_height: u32,
+    _resource_manager: PhantomData<T>,
 }
 
-impl NvEncoder {
+impl<T> NvEncoderBase<T>
+where
+    T: NvEncoderResourceManager + ?Sized,
+{
     pub fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
@@ -136,6 +148,7 @@ impl NvEncoder {
             motion_vector_data_output_buffer: Vec::new(),
             max_encode_width: width,
             max_encode_height: height,
+            _resource_manager: PhantomData,
         })
     }
 
@@ -211,7 +224,16 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn register_input_resources() {
+    pub(super) fn register_input_resources(
+        &mut self,
+        input_frames: &[NV_ENC_INPUT_RESOURCE_OPENGL_TEX],
+        resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+        width: u32,
+        height: u32,
+        pitch: u32,
+        buffer_format: BufferFormat,
+        reference_frame: bool,
+    ) {
         unimplemented!()
     }
 
@@ -223,20 +245,20 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn get_max_encode_width() -> u32 {
-        unimplemented!()
+    pub fn get_max_encode_width(&self) -> u32 {
+        self.max_encode_width
     }
 
-    fn get_max_encode_height() -> u32 {
-        unimplemented!()
+    pub fn get_max_encode_height(&self) -> u32 {
+        self.max_encode_height
     }
 
     fn get_completion_event() {
         unimplemented!()
     }
 
-    fn get_pixel_format() {
-        unimplemented!()
+    pub fn get_pixel_format(&self) -> BufferFormat {
+        self.buffer_format
     }
 
     fn do_encode() {
@@ -307,7 +329,7 @@ impl NvEncoder {
         unimplemented!()
     }
 
-    fn destroy_hw_encoder() {
+    fn destroy_hw_encoder(&mut self) {
         unimplemented!()
     }
 
@@ -320,8 +342,14 @@ impl NvEncoder {
     }
 }
 
-impl Drop for NvEncoder {
-    fn drop(&mut self) {}
+impl<T> Drop for NvEncoderBase<T>
+where
+    T: NvEncoderResourceManager + ?Sized,
+{
+    fn drop(&mut self) {
+        T::release_input_buffers(self).unwrap();
+        self.destroy_hw_encoder();
+    }
 }
 
 pub(super) struct NvEncInputFrame {
@@ -330,6 +358,6 @@ pub(super) struct NvEncInputFrame {
     num_chroma_planes: u32,
     pitch: u32,
     chroma_pitch: u32,
-    buffer_format: NV_ENC_BUFFER_FORMAT,
+    buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
 }

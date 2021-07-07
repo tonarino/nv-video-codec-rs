@@ -1,14 +1,10 @@
-use super::{nvencoder::NvEncoder, NvEncoderError};
+use super::{nvencoderbase::NvEncoderBase, NvEncoderError};
 
-pub trait NvEncoderResourceManager {
+pub(super) trait NvEncoderResourceManager {
     fn allocate_input_buffers(
-        encoder: &mut NvEncoder,
+        encoder: &mut NvEncoderBase<Self>,
         num_input_buffers: u32,
-    ) -> Result<(), NvEncoderError> {
-        todo!()
-    }
+    ) -> Result<(), NvEncoderError>;
 
-    fn release_input_buffers(encoder: &mut NvEncoder) -> Result<(), NvEncoderError> {
-        todo!()
-    }
+    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> Result<(), NvEncoderError>;
 }

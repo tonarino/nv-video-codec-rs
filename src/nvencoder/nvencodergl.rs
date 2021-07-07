@@ -1,12 +1,15 @@
 use core::num;
 
-use super::{nvencoder::NvEncoder, types::BufferFormat, NvEncoderError, NvEncoderResourceManager};
+use super::{
+    nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
+    NvEncoderError,
+};
 use nv_video_codec_sys::{
     NV_ENC_BUFFER_FORMAT, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE,
 };
 
 pub struct NvEncoderGL {
-    encoder: NvEncoder,
+    encoder: NvEncoderBase<NvEncoderGLResourceManager>,
 }
 
 impl NvEncoderGL {
@@ -19,7 +22,7 @@ impl NvEncoderGL {
     ) -> Result<Self, NvEncoderError> {
         // TODO: remove this unwrap
         Ok(Self {
-            encoder: NvEncoder::new(
+            encoder: NvEncoderBase::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
                 width,
@@ -28,34 +31,43 @@ impl NvEncoderGL {
                 extra_output_delay,
                 motion_extimation_only,
                 false,
-            )
-            .unwrap(),
+            )?,
         })
     }
 }
 
-impl NvEncoderGL {
+impl NvEncoderBase<NvEncoderGLResourceManager> {
     fn release_gl_resources(&mut self) -> Result<(), NvEncoderError> {
-        if self.encoder.encoder_handle.is_null() {
+        if self.encoder_handle.is_null() {
             return Ok(());
         }
-        self.encoder.unregister_input_resources();
+        self.unregister_input_resources();
 
-        for input_frame in self.encoder.input_frames.iter() {
-            let pResource = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
-            if !pResource.is_null() {
-                // pResource.texture
+        for input_frame in self.input_frames.iter() {
+            let resource_ptr = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            if !resource_ptr.is_null() {
+                unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
+                // TODO(efyang) check for possible memory leak here (vs original delete)
             }
         }
-        todo!()
+        self.input_frames.clear();
+
+        for reference_frame in self.reference_frames.iter() {
+            let resource_ptr = reference_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            if !resource_ptr.is_null() {
+                unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
+            }
+        }
+        self.reference_frames.clear();
+        Ok(())
     }
 }
 
-pub struct NvEncoderGLResourceManager {}
+pub(super) struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     fn allocate_input_buffers(
-        encoder: &mut NvEncoder,
+        encoder: &mut NvEncoderBase<Self>,
         num_input_buffers: u32,
     ) -> Result<(), NvEncoderError> {
         if !encoder.is_hw_encoder_initialized() {
@@ -63,25 +75,61 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
             panic!("Encoder device not initialized");
         }
         let num_count = if encoder.motion_estimation_only { 2 } else { 1 };
+        let pixel_format = encoder.get_pixel_format();
         for count in 0..num_count {
-            let mut tex = 0;
-            unsafe {
-                gl::GenTextures(1, &mut tex);
-                gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
+            let mut input_frames = Vec::new();
+            for _ in 0..num_input_buffers {
+                let mut tex = 0;
+                unsafe {
+                    gl::GenTextures(1, &mut tex);
+                    gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
+                }
+
+                let chroma_height =
+                    if matches!(pixel_format, BufferFormat::YV12 | BufferFormat::IYUV) {
+                        pixel_format.get_num_chroma_planes()?
+                            * pixel_format.get_chroma_height(encoder.get_max_encode_height())?
+                    } else {
+                        pixel_format.get_chroma_height(encoder.get_max_encode_height())?
+                    };
+
+                unsafe {
+                    gl::TexImage2D(
+                        gl::TEXTURE_RECTANGLE,
+                        0,
+                        gl::R8 as i32,
+                        (pixel_format.get_width_in_bytes(encoder.get_max_encode_width())?) as i32,
+                        (encoder.get_max_encode_height() + chroma_height) as i32,
+                        0,
+                        gl::RED,
+                        gl::UNSIGNED_BYTE,
+                        std::ptr::null_mut(),
+                    );
+                    gl::BindTexture(gl::TEXTURE_RECTANGLE, 0);
+                }
+
+                let resource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+                    texture: tex,
+                    target: gl::TEXTURE_RECTANGLE,
+                };
+
+                input_frames.push(resource);
             }
+
+            encoder.register_input_resources(
+                &input_frames,
+                nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
+                encoder.get_max_encode_width(),
+                encoder.get_max_encode_width(),
+                pixel_format.get_width_in_bytes(encoder.get_max_encode_width())?,
+                pixel_format,
+                count == 1
+            );
         }
-        todo!()
+        Ok(())
     }
 
-    fn release_input_buffers(encoder: &mut NvEncoder) -> Result<(), NvEncoderError> {
-        todo!()
+    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> Result<(), NvEncoderError> {
+        encoder.release_gl_resources()
     }
-}
-
-impl Drop for NvEncoderGLResourceManager {
-    fn drop(&mut self) {}
-}
-
-impl Drop for NvEncoderGL {
-    fn drop(&mut self) {}
 }
