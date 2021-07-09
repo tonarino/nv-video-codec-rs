@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{ffi::c_void, marker::PhantomData};
 
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, GUID, NVENCAPI_MAJOR_VERSION,
@@ -7,7 +7,7 @@ use nv_video_codec_sys::{
     NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
     NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE,
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE,
-    NV_ENC_PRESET_CONFIG, NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO, _NV_ENC_QP,
+    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO, _NV_ENC_QP,
 };
 
 use super::{
@@ -325,12 +325,46 @@ where
     /// Applications must call EncodeFrame() function to encode the uncompressed
     /// data, which has been copied to an input buffer obtained from the
     /// GetNextInputFrame() function.
-    pub fn encode_frame(&mut self) {
+    pub fn encode_frame(
+        &mut self,
+        packet: &mut Vec<Vec<u8>>,
+        pic_params: NV_ENC_PIC_PARAMS,
+    ) -> Result<(), NvEncoderError> {
+        packet.clear();
+        if !self.is_hw_encoder_initialized() {
+            return Err(NvEncError::NoEncodeDevice.into());
+        }
+
+        let buffer_index = (self.to_send % self.encoder_buffer) as u32;
+        self.map_resources(buffer_index);
+
+        let encode_status = self.do_encode(
+            self.mapped_input_buffers[buffer_index as usize],
+            self.bitstream_output_buffer[buffer_index as usize],
+            pic_params,
+        );
+
+        match encode_status {
+            Ok(_) | Err(NvEncError::NeedMoreInput) => {
+                self.to_send += 1;
+                self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, true)?;
+            },
+            _ => {
+                encode_status?;
+            },
+        }
         unimplemented!()
     }
 
-    pub fn end_encode() {
-        unimplemented!()
+    pub fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> Result<(), NvEncoderError> {
+        packet.clear();
+        if !self.is_hw_encoder_initialized() {
+            return Err(NvEncError::EncoderNotInitialized.into());
+        }
+        self.send_eos()?;
+
+        self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, false)?;
+        Ok(())
     }
 
     pub fn get_capability_value() {
@@ -458,7 +492,12 @@ where
         self.buffer_format
     }
 
-    fn do_encode() {
+    fn do_encode(
+        &mut self,
+        input_buffer: *mut c_void,
+        output_buffer: *mut c_void,
+        pic_params: NV_ENC_PIC_PARAMS,
+    ) -> Result<(), NvEncError> {
         unimplemented!()
     }
 
@@ -466,7 +505,7 @@ where
         unimplemented!()
     }
 
-    fn map_resources() {
+    fn map_resources(&mut self, buffer_index: u32) -> Result<(), NvEncoderError> {
         unimplemented!()
     }
 
@@ -474,7 +513,7 @@ where
         unimplemented!()
     }
 
-    fn send_eos() {
+    fn send_eos(&mut self) -> Result<(), NvEncError> {
         unimplemented!()
     }
 
@@ -506,7 +545,12 @@ where
         Ok(nvenc_api)
     }
 
-    fn get_encoded_packet() {
+    fn get_encoded_packet(
+        &mut self,
+        output_buffer: &mut Vec<*mut c_void>,
+        packet: &mut Vec<Vec<u8>>,
+        output_delay: bool,
+    ) -> Result<(), NvEncoderError> {
         unimplemented!()
     }
 
