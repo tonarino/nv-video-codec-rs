@@ -6,8 +6,8 @@ use nv_video_codec_sys::{
     NV_ENC_BUFFER_FORMAT, NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID, NV_ENC_CONFIG,
     NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
     NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE,
-    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PRESET_CONFIG,
-    NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO,
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE,
+    NV_ENC_PRESET_CONFIG, NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO, _NV_ENC_QP,
 };
 
 use super::{
@@ -157,6 +157,9 @@ where
         })
     }
 
+    /// This function is used to initialize the encoder session.
+    /// Application must call this function to initialize the encoder, before
+    /// starting to encode any frames.
     pub fn create_encoder(
         &mut self,
         encoder_params: &NV_ENC_INITIALIZE_PARAMS,
@@ -225,27 +228,104 @@ where
             }
             self.encode_config.version = NV_ENC_CONFIG_VER;
         } else {
-            let preset_config = NV_ENC_PRESET_CONFIG {
+            let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
-                presetCfg: Default::default(),
+                presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..Default::default() },
                 ..Default::default()
             };
+            if !self.motion_estimation_only {
+                unsafe {
+                    self.nv_encode_api_function_list.nvEncGetEncodePresetConfigEx.unwrap()(
+                        self.encoder_handle as *mut _,
+                        encoder_params.encodeGUID,
+                        encoder_params.presetGUID,
+                        encoder_params.tuningInfo,
+                        &mut preset_config,
+                    )
+                    .into_nvenc_result()?;
+                }
+                self.encode_config = preset_config.presetCfg.clone();
+            } else {
+                self.encode_config.version = NV_ENC_CONFIG_VER;
+                self.encode_config.rcParams.rateControlMode =
+                    NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+                self.encode_config.rcParams.constQP =
+                    _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
+            }
+        }
+        self.initialize_params.encodeConfig = &mut self.encode_config;
+
+        unsafe {
+            self.nv_encode_api_function_list.nvEncInitializeEncoder.unwrap()(
+                self.encoder_handle as *mut _,
+                &mut self.initialize_params,
+            )
+            .into_nvenc_result()?;
         }
 
+        self.encoder_initialized = true;
+        self.width = self.initialize_params.encodeWidth;
+        self.height = self.initialize_params.encodeHeight;
+        self.max_encode_width = self.initialize_params.maxEncodeWidth;
+        self.max_encode_height = self.initialize_params.maxEncodeHeight;
+
+        // TODO(efyang): convert this to a usize
+        self.encoder_buffer = self.encode_config.frameIntervalP
+            + self.encode_config.rcParams.lookaheadDepth as i32
+            + self.extra_output_delay as i32;
+        self.output_delay = self.encoder_buffer - 1;
+        self.mapped_input_buffers.resize(self.encoder_buffer as usize, std::ptr::null_mut());
+
+        if !self.output_in_video_memory {
+            self.completion_event.resize(self.encoder_buffer as usize, std::ptr::null_mut());
+        }
+
+        if self.motion_estimation_only {
+            self.mapped_ref_buffers.resize(self.encoder_buffer as usize, std::ptr::null_mut());
+            if !self.output_in_video_memory {
+                self.initialize_mv_output_buffer();
+            }
+        } else if !self.output_in_video_memory {
+            self.bitstream_output_buffer.resize(self.encoder_buffer as usize, std::ptr::null_mut());
+            self.initialize_bitstream_buffer();
+        }
+
+        ResourceManager::allocate_input_buffers(self, self.encoder_buffer as u32)?;
         Ok(())
     }
 
-    pub fn destroy_encoder() {
-        unimplemented!()
+    /// This function is used to destroy the encoder session.
+    /// Application must call this function to destroy the encoder session and
+    /// clean up any allocated resources. The application must call EndEncode()
+    /// function to get any queued encoded frames before calling DestroyEncoder().
+    pub fn destroy_encoder(&mut self) -> Result<(), NvEncoderError> {
+        if self.encoder_handle.is_null() {
+            return Ok(());
+        }
+
+        ResourceManager::release_input_buffers(self)?;
+        self.destroy_hw_encoder();
+        Ok(())
     }
 
     pub fn reconfigure() -> bool {
         unimplemented!()
     }
 
-    pub fn get_next_input_frame() {}
+    /// This function is used to get the next available input buffer.
+    /// Applications must call this function to obtain a pointer to the next
+    /// input buffer. The application must copy the uncompressed data to the
+    /// input buffer and then call EncodeFrame() function to encode it.
+    pub fn get_next_input_frame(&mut self) -> &NvEncInputFrame {
+        // TODO(efyang): make this return value lifetime'd
+        &self.input_frames[(self.to_send % self.encoder_buffer) as usize]
+    }
 
-    pub fn encode_frame() {
+    /// This function is used to encode a frame.
+    /// Applications must call EncodeFrame() function to encode the uncompressed
+    /// data, which has been copied to an input buffer obtained from the
+    /// GetNextInputFrame() function.
+    pub fn encode_frame(&mut self) {
         unimplemented!()
     }
 
@@ -430,19 +510,19 @@ where
         unimplemented!()
     }
 
-    fn initialize_bitstream_buffer() {
+    fn initialize_bitstream_buffer(&mut self) {
         unimplemented!()
     }
 
-    fn destroy_bitstream_buffer() {
+    fn destroy_bitstream_buffer(&mut self) {
         unimplemented!()
     }
 
-    fn initialize_mv_output_buffer() {
+    fn initialize_mv_output_buffer(&mut self) {
         unimplemented!()
     }
 
-    fn destroy_mv_output_buffer() {
+    fn destroy_mv_output_buffer(&mut self) {
         unimplemented!()
     }
 
