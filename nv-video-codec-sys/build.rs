@@ -71,6 +71,8 @@ fn main() {
         .constified_enum_module("cuvidDecodeStatus_enum")
         .constified_enum_module("CUmemorytype_enum")
         .constified_enum_module("_NV_ENC_BUFFER_FORMAT")
+        .constified_enum_module("_NV_ENC_PIC_FLAGS")
+        .constified_enum_module("_NV_ENC_PIC_STRUCT")
         .rustified_enum(".*")
         .derive_default(true)
         .allowlist_var("(?i)(.*cu.*|.*nv.*)")

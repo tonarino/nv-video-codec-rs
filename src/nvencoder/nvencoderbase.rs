@@ -3,11 +3,13 @@ use std::{ffi::c_void, marker::PhantomData};
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, GUID, NVENCAPI_MAJOR_VERSION,
     NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENCSTATUS, NV_ENCODE_API_FUNCTION_LIST,
-    NV_ENC_BUFFER_FORMAT, NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID, NV_ENC_CONFIG,
-    NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE,
-    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE,
-    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_REGISTERED_PTR, NV_ENC_TUNING_INFO, _NV_ENC_QP,
+    NV_ENC_BUFFER_FORMAT, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS, NV_ENC_CAPS_PARAM,
+    NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID, NV_ENC_CONFIG, NV_ENC_DEVICE_TYPE,
+    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
+    NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG,
+    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
+    _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
 
 use super::{
@@ -24,6 +26,9 @@ const NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER: u32 = nvenc_api_struct_version(1
 const NV_ENC_INITIALIZE_PARAMS_VER: u32 = nvenc_api_struct_version(5) | (1 << 31);
 const NV_ENC_CONFIG_VER: u32 = nvenc_api_struct_version(7) | (1 << 31);
 const NV_ENC_PRESET_CONFIG_VER: u32 = nvenc_api_struct_version(4) | (1 << 31);
+const NV_ENC_CAPS_PARAM_VER: u32 = nvenc_api_struct_version(1);
+const NV_ENC_PIC_PARAMS_VER: u32 = nvenc_api_struct_version(4) | (1 << 31);
+const NV_ENC_LOCK_BITSTREAM_VER: u32 = nvenc_api_struct_version(1);
 
 #[repr(C)]
 pub(super) struct EncoderHandle {
@@ -328,7 +333,7 @@ where
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<Vec<u8>>,
-        pic_params: NV_ENC_PIC_PARAMS,
+        pic_params: Option<NV_ENC_PIC_PARAMS>,
     ) -> Result<(), NvEncoderError> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -347,7 +352,8 @@ where
         match encode_status {
             Ok(_) | Err(NvEncError::NeedMoreInput) => {
                 self.to_send += 1;
-                self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, true)?;
+                // TODO(efyang): fix
+                // self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, true)?;
             },
             _ => {
                 encode_status?;
@@ -356,6 +362,11 @@ where
         unimplemented!()
     }
 
+    /// This function to flush the encoder queue.
+    /// The encoder might be queuing frames for B picture encoding or lookahead;
+    /// the application must call EndEncode() to get all the queued encoded frames
+    /// from the encoder. The application must call this function before destroying
+    /// an encoder session.
     pub fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> Result<(), NvEncoderError> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -363,32 +374,84 @@ where
         }
         self.send_eos()?;
 
-        self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, false)?;
-        Ok(())
-    }
-
-    pub fn get_capability_value() {
+        // TODO(efyang): fix
+        // self.get_encoded_packet(&mut self.bitstream_output_buffer, packet, false)?;
         unimplemented!()
     }
 
-    pub fn get_device() {
-        unimplemented!()
+    /// This function is used to query hardware encoder capabilities.
+    /// Applications can call this function to query capabilities like maximum encode
+    /// dimensions, support for lookahead or the ME-only mode etc.
+    pub fn get_capability_value(
+        &mut self,
+        codec_guid: GUID,
+        caps_to_query: NV_ENC_CAPS,
+    ) -> Result<(NV_ENC_CAPS, i32), NvEncoderError> {
+        // TODO (efyang): make this return better
+        if self.encoder_handle.is_null() {
+            return Err(NvEncError::EncoderNotInitialized.into());
+        }
+        let mut caps_param = NV_ENC_CAPS_PARAM {
+            version: NV_ENC_CAPS_PARAM_VER,
+            capsToQuery: caps_to_query,
+            ..Default::default()
+        };
+
+        let mut v = 0;
+        unsafe {
+            self.nv_encode_api_function_list.nvEncGetEncodeCaps.unwrap()(
+                self.encoder_handle as *mut _,
+                codec_guid,
+                &mut caps_param,
+                &mut v,
+            )
+            .into_nvenc_result()?;
+        }
+        Ok((caps_param.capsToQuery, v))
     }
 
-    pub fn get_device_type() {
-        unimplemented!()
+    /// This function is used to get the current device on which encoder is running.
+    pub fn get_device(&self) -> Option<&mut Device> {
+        unsafe { self.device.as_mut() }
     }
 
-    pub fn get_encode_width() {
-        unimplemented!()
+    /// This function is used to get the current device type which encoder is running.
+    pub fn get_device_type(&self) -> NV_ENC_DEVICE_TYPE {
+        self.device_type
     }
 
-    pub fn get_encode_height() {
-        unimplemented!()
+    /// This function is used to get the current encode width.
+    /// The encode width can be modified by Reconfigure() function.
+    pub fn get_encode_width(&self) -> u32 {
+        self.width
     }
 
-    pub fn get_frame_size() {
-        unimplemented!()
+    /// This function is used to get the current encode height.
+    /// The encode width can be modified by Reconfigure() function.
+    pub fn get_encode_height(&self) -> u32 {
+        self.height
+    }
+
+    /// This function is used to get the current frame size based on pixel format.
+    pub fn get_frame_size(&self) -> Result<u32, NvEncoderError> {
+        match self.get_pixel_format() {
+            BufferFormat::YV12 | BufferFormat::IYUV | BufferFormat::NV12 => Ok(self
+                .get_encode_width()
+                * (self.get_encode_height() + (self.get_encode_height() + 1) / 2)),
+            BufferFormat::YUV420_10BIT => Ok(2
+                * self.get_encode_width()
+                * (self.get_encode_height() + (self.get_encode_height() + 1) / 2)),
+            BufferFormat::YUV444 => Ok(self.get_encode_width() * self.get_encode_height() * 3),
+            BufferFormat::YUV444_10BIT => {
+                Ok(2 * self.get_encode_width() * self.get_encode_height() * 3)
+            },
+            BufferFormat::ARGB
+            | BufferFormat::ARGB10
+            | BufferFormat::AYUV
+            | BufferFormat::ABGR
+            | BufferFormat::ABGR10 => Ok(4 * self.get_encode_height() * self.get_encode_width()),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
     }
 
     pub fn create_default_encoder_params(
@@ -433,8 +496,11 @@ where
         // })
     }
 
-    pub fn get_initialize_params() {
-        unimplemented!()
+    pub fn get_initialize_params(&self) -> Result<NV_ENC_INITIALIZE_PARAMS, NvEncoderError> {
+        if self.initialize_params.encodeConfig.is_null() {
+            return Err(NvEncError::InvalidPointer.into());
+        }
+        Ok(self.initialize_params)
     }
 
     pub fn run_motion_estimation() {
@@ -457,22 +523,112 @@ where
 
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &[NV_ENC_INPUT_RESOURCE_OPENGL_TEX],
+        input_frames: &mut [NV_ENC_INPUT_RESOURCE_OPENGL_TEX], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
         pitch: u32,
         buffer_format: BufferFormat,
         reference_frame: bool,
-    ) {
+    ) -> Result<(), NvEncoderError> {
+        for input_frame in input_frames.iter_mut() {
+            let registered_ptr = self.register_resource(
+                resource_type,
+                width,
+                height,
+                pitch,
+                buffer_format,
+                NV_ENC_BUFFER_USAGE::NV_ENC_INPUT_IMAGE,
+            );
+
+            let mut chroma_offsets =
+                self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
+            chroma_offsets.resize(2, 0);
+            // TODO(efyang): make input_ptr restricted as an enum, or just straight up opengl tex
+            let registered_input_frame = NvEncInputFrame {
+                input_ptr: input_frame as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input,
+                chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
+                num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
+                pitch,
+                chroma_pitch: self.buffer_format.get_chroma_pitch(pitch)?,
+                buffer_format: self.buffer_format,
+                resource_type,
+            };
+
+            if reference_frame {
+                self.registered_resources_for_reference.push(registered_ptr);
+                self.reference_frames.push(registered_input_frame);
+            } else {
+                self.registered_resources.push(registered_ptr);
+                self.input_frames.push(registered_input_frame);
+            }
+        }
         unimplemented!()
     }
 
-    pub(super) fn unregister_input_resources(&mut self) {
-        unimplemented!()
+    pub(super) fn unregister_input_resources(&mut self) -> Result<(), NvEncoderError> {
+        self.flush_encoder();
+
+        if self.motion_estimation_only {
+            for &mapped_ref_buffer in self.mapped_ref_buffers.iter().filter(|p| !p.is_null()) {
+                unsafe {
+                    self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
+                        self.encoder_handle as *mut _,
+                        mapped_ref_buffer,
+                    )
+                    .into_nvenc_result()?;
+                }
+            }
+        }
+        self.mapped_ref_buffers.clear();
+
+        for &mapped_input_buffer in self.mapped_input_buffers.iter().filter(|p| !p.is_null()) {
+            unsafe {
+                self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
+                    self.encoder_handle as *mut _,
+                    mapped_input_buffer,
+                )
+                .into_nvenc_result()?;
+            }
+        }
+        self.mapped_input_buffers.clear();
+
+        for &registered_resource in self.registered_resources.iter().filter(|&p| !p.is_null()) {
+            unsafe {
+                self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
+                    self.encoder_handle as *mut _,
+                    registered_resource,
+                )
+                .into_nvenc_result()?;
+            }
+        }
+        self.registered_resources.clear();
+
+        for &registered_resource_for_reference in
+            self.registered_resources_for_reference.iter().filter(|&p| !p.is_null())
+        {
+            unsafe {
+                self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
+                    self.encoder_handle as *mut _,
+                    registered_resource_for_reference,
+                )
+                .into_nvenc_result()?;
+            }
+        }
+        self.registered_resources_for_reference.clear();
+
+        Ok(())
     }
 
-    fn register_resource() {
+    fn register_resource(
+        &mut self,
+        resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+        width: u32,
+        height: u32,
+        pitch: u32,
+        buffer_format: BufferFormat,
+        buffer_usage: NV_ENC_BUFFER_USAGE,
+    ) -> NV_ENC_REGISTERED_PTR {
         unimplemented!()
     }
 
@@ -484,8 +640,12 @@ where
         self.max_encode_height
     }
 
-    fn get_completion_event() {
-        unimplemented!()
+    fn get_completion_event(&mut self, event_idx: u32) -> *mut CompletionEvent {
+        if self.completion_event.len() == self.encoder_buffer as usize {
+            self.completion_event[event_idx as usize]
+        } else {
+            std::ptr::null_mut()
+        }
     }
 
     pub fn get_pixel_format(&self) -> BufferFormat {
@@ -494,11 +654,32 @@ where
 
     fn do_encode(
         &mut self,
-        input_buffer: *mut c_void,
-        output_buffer: *mut c_void,
-        pic_params: NV_ENC_PIC_PARAMS,
+        input_buffer: NV_ENC_INPUT_PTR,
+        output_buffer: NV_ENC_OUTPUT_PTR,
+        pic_params: Option<NV_ENC_PIC_PARAMS>,
     ) -> Result<(), NvEncError> {
-        unimplemented!()
+        let mut pic_params = NV_ENC_PIC_PARAMS {
+            version: NV_ENC_PIC_PARAMS_VER,
+            pictureStruct: _NV_ENC_PIC_STRUCT::NV_ENC_PIC_STRUCT_FRAME,
+            inputBuffer: input_buffer,
+            bufferFmt: self.get_pixel_format().into(),
+            inputWidth: self.get_encode_width(),
+            inputHeight: self.get_encode_height(),
+            outputBitstream: output_buffer,
+            completionEvent: self
+                .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
+                as *mut _,
+            ..pic_params.unwrap_or_default()
+        };
+        unsafe {
+            self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
+                self.encoder_handle as *mut _,
+                &mut pic_params,
+            )
+            .into_nvenc_result()?;
+        }
+
+        Ok(())
     }
 
     fn do_motion_estimation() {
@@ -509,12 +690,27 @@ where
         unimplemented!()
     }
 
-    fn wait_for_completion_event() {
-        unimplemented!()
+    fn wait_for_completion_event(&self, _event: i32) {
+        // does nothing on linux
     }
 
     fn send_eos(&mut self) -> Result<(), NvEncError> {
-        unimplemented!()
+        let mut pic_params = NV_ENC_PIC_PARAMS {
+            version: NV_ENC_PIC_PARAMS_VER,
+            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS,
+            completionEvent: self
+                .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
+                as *mut _,
+            ..Default::default()
+        };
+        unsafe {
+            self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
+                self.encoder_handle as *mut _,
+                &mut pic_params,
+            )
+            .into_nvenc_result()?;
+        }
+        Ok(())
     }
 
     // Private
@@ -551,6 +747,71 @@ where
         packet: &mut Vec<Vec<u8>>,
         output_delay: bool,
     ) -> Result<(), NvEncoderError> {
+        let mut i = 0;
+        let end =
+            if self.output_delay != 0 { self.to_send - self.output_delay } else { self.to_send };
+        while self.got < end {
+            let packet_index = (self.got % self.encoder_buffer) as usize;
+            self.wait_for_completion_event(packet_index as i32);
+
+            let mut lock_bitstream_data = NV_ENC_LOCK_BITSTREAM {
+                version: NV_ENC_LOCK_BITSTREAM_VER,
+                outputBitstream: output_buffer[packet_index],
+                ..Default::default()
+            };
+            lock_bitstream_data.set_doNotWait(false as u32);
+            unsafe {
+                self.nv_encode_api_function_list.nvEncLockBitstream.unwrap()(
+                    self.encoder_handle as *mut _,
+                    &mut lock_bitstream_data,
+                )
+                .into_nvenc_result()?;
+            }
+
+            let data_ptr = lock_bitstream_data.bitstreamBufferPtr as *mut u8;
+            if packet.len() < i + 1 {
+                packet.push(Vec::new());
+            }
+            unsafe {
+                packet[i] = Vec::from_raw_parts(
+                    data_ptr,
+                    lock_bitstream_data.bitstreamSizeInBytes as usize,
+                    lock_bitstream_data.bitstreamSizeInBytes as usize,
+                );
+            }
+
+            unsafe {
+                self.nv_encode_api_function_list.nvEncUnlockBitstream.unwrap()(
+                    self.encoder_handle as *mut _,
+                    self.mapped_input_buffers[packet_index],
+                )
+                .into_nvenc_result()?;
+            }
+
+            if !self.mapped_input_buffers[packet_index].is_null() {
+                unsafe {
+                    self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
+                        self.encoder_handle as *mut _,
+                        self.mapped_input_buffers[packet_index],
+                    )
+                    .into_nvenc_result()?;
+                }
+                self.mapped_input_buffers[packet_index] = std::ptr::null_mut();
+            }
+
+            if self.motion_estimation_only && !self.mapped_ref_buffers[packet_index].is_null() {
+                unsafe {
+                    self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
+                        self.encoder_handle as *mut _,
+                        self.mapped_ref_buffers[packet_index],
+                    )
+                    .into_nvenc_result()?;
+                }
+                self.mapped_ref_buffers[packet_index] = std::ptr::null_mut();
+            }
+
+            self.got += 1;
+        }
         unimplemented!()
     }
 
@@ -574,7 +835,7 @@ where
         unimplemented!()
     }
 
-    fn flush_encoder() {
+    fn flush_encoder(&mut self) {
         unimplemented!()
     }
 

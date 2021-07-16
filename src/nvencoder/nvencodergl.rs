@@ -117,7 +117,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
             }
 
             encoder.register_input_resources(
-                &input_frames,
+                &mut input_frames,
                 nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
                 encoder.get_max_encode_width(),
                 encoder.get_max_encode_width(),
