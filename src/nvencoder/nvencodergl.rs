@@ -124,7 +124,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                 pixel_format.get_width_in_bytes(encoder.get_max_encode_width())?,
                 pixel_format,
                 count == 1
-            );
+            )?;
         }
         Ok(())
     }
