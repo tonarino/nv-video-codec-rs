@@ -739,7 +739,7 @@ where
     fn map_resources(&mut self, buffer_index: u32) -> Result<(), NvEncoderError> {
         // TODO: a lot of these functions follow the same make a struct and then send it,
         // this could probably be wrapped up into actual rust functions, especially to separate out the version info
-        let map_input_resource = NV_ENC_MAP_INPUT_RESOURCE {
+        let mut map_input_resource = NV_ENC_MAP_INPUT_RESOURCE {
             version: NV_ENC_MAP_INPUT_RESOURCE_VER,
             registeredResource: self.registered_resources[buffer_index as usize],
             ..Default::default()
@@ -970,7 +970,7 @@ where
 
     fn destroy_hw_encoder(&mut self) -> Result<(), NvEncoderError> {
         if self.encoder_handle.is_null() {
-            return;
+            return Err(NvEncError::EncoderNotInitialized.into());
         }
 
         if self.motion_estimation_only {
