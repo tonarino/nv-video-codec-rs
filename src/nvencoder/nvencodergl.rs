@@ -1,12 +1,8 @@
-use core::num;
-
 use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderError,
+    NvEncoder, NvEncoderResult,
 };
-use nv_video_codec_sys::{
-    NV_ENC_BUFFER_FORMAT, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE,
-};
+use nv_video_codec_sys::{NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE};
 
 pub struct NvEncoderGL {
     encoder: NvEncoderBase<NvEncoderGLResourceManager>,
@@ -19,7 +15,7 @@ impl NvEncoderGL {
         buffer_format: BufferFormat,
         extra_output_delay: u32,
         motion_extimation_only: bool,
-    ) -> Result<Self, NvEncoderError> {
+    ) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
             encoder: NvEncoderBase::new(
@@ -37,11 +33,11 @@ impl NvEncoderGL {
 }
 
 impl NvEncoderBase<NvEncoderGLResourceManager> {
-    fn release_gl_resources(&mut self) -> Result<(), NvEncoderError> {
+    fn release_gl_resources(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
         }
-        self.unregister_input_resources();
+        self.unregister_input_resources()?;
 
         for input_frame in self.input_frames.iter() {
             let resource_ptr = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
@@ -69,7 +65,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     fn allocate_input_buffers(
         encoder: &mut NvEncoderBase<Self>,
         num_input_buffers: u32,
-    ) -> Result<(), NvEncoderError> {
+    ) -> NvEncoderResult<()> {
         if !encoder.is_hw_encoder_initialized() {
             // TODO(efyang): make this an error
             panic!("Encoder device not initialized");
@@ -129,7 +125,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
         Ok(())
     }
 
-    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> Result<(), NvEncoderError> {
+    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> NvEncoderResult<()> {
         encoder.release_gl_resources()
     }
 }
