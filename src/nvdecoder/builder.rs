@@ -10,8 +10,8 @@ pub struct NvDecoderBuilder {
     codec: Codec,
     low_latency: bool,
     device_frame_pitched: bool,
-    crop_rect: Rect,
-    resize_dim: Dim,
+    crop_rect: Rect<usize>,
+    resize_dim: Dim<usize>,
     max_width: u32,
     max_height: u32,
     clock_rate: u32,
@@ -22,9 +22,9 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(device_frame_pitched: bool);
 
-    builder_field_setter!(crop_rect: Rect);
+    builder_field_setter!(crop_rect: Rect<usize>);
 
-    builder_field_setter!(resize_dim: Dim);
+    builder_field_setter!(resize_dim: Dim<usize>);
 
     builder_field_setter!(max_width: u32);
 

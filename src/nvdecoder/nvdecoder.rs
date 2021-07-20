@@ -1,9 +1,6 @@
-use crate::{
-    common::{
+use crate::{common::{
         ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, IntoCudaResult, Rect, SurfaceFormat,
-    },
-    nvdecoder::FrameData,
-};
+    }, nvdecoder::{FrameData, Scan}};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
@@ -18,15 +15,9 @@ use ffi::{
 use nv_video_codec_sys as ffi;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustacuda::context::{Context, ContextHandle, ContextStack};
-use std::{
-    collections::VecDeque,
-    convert::TryInto,
-    os::raw::{c_int, c_ulong, c_void},
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::VecDeque, convert::{TryFrom, TryInto}, os::raw::{c_int, c_ulong, c_void}, sync::Arc, time::Instant};
 
-use super::{DecoderPacketFlags, Frame, NvDecoderError};
+use super::{DecoderPacketFlags, Frame, NvDecoderError, VideoFormat};
 
 pub struct NvDecoder<'a> {
     parser: CUvideoparser,
@@ -36,17 +27,17 @@ pub struct NvDecoder<'a> {
     codec: Codec,
     chroma_format: ChromaFormat,
     output_format: SurfaceFormat,
-    video_format: CUVIDEOFORMAT,
+    video_format: VideoFormat,
     device_frame_pitched: bool,
-    crop_rect: Rect,
-    resize_dim: Dim,
+    crop_rect: Rect<usize>,
+    resize_dim: Dim<usize>,
     max_width: u32,
     max_height: u32,
     ctx_lock: CUvideoctxlock,
     video_info: String,
     bitdepth_minus_8: i32,
     bpp: i32,
-    display_rect: Rect,
+    display_rect: Rect<usize>,
     device_frame_pitch: size_t,
 
     decoded_frames: usize,
@@ -77,7 +68,10 @@ unsafe extern "C" fn handle_video_sequence_proc(
     video_format: *mut CUVIDEOFORMAT,
 ) -> c_int {
     debug_assert!(!decoder.is_null());
-    (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(video_format)
+    match VideoFormat::try_from(*video_format) {
+        Ok(format) => (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(format),
+        Err(e) => { eprintln!("{:?}", e); 0 }
+    }
 }
 
 /// decoder refers to an NvDecoder
@@ -126,13 +120,12 @@ impl<'a> NvDecoder<'a> {
     /* Return value from HandleVideoSequence() are interpreted as   :
      *  0: fail, 1: succeeded, > 1: override dpb size of parser (set by CUVIDPARSERPARAMS::ulMaxNumDecodeSurfaces while creating parser)
      */
-    fn handle_video_sequence(&mut self, video_format: *mut CUVIDEOFORMAT) -> i32 {
+    fn handle_video_sequence(&mut self, video_format: VideoFormat) -> i32 {
         let session_init_start = Instant::now();
-
-        let video_format = unsafe { *video_format };
 
         let decode_surface = video_format.min_num_decode_surfaces;
 
+        self.video_format = video_format;
         // TODO(efyang)
         // for our use cases, we don't need pretty much all of this stuff after we've
         // initialized properly if we're assuming the same format thereafter
@@ -145,9 +138,9 @@ impl<'a> NvDecoder<'a> {
 
         self.video_info = format!("Video Input Information:\n{:#?}", video_format);
         let mut decode_caps = CUVIDDECODECAPS::default();
-        decode_caps.eCodecType = video_format.codec;
-        decode_caps.eChromaFormat = video_format.chroma_format;
-        decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
+        decode_caps.eCodecType = video_format.codec as u32;
+        decode_caps.eChromaFormat = video_format.chroma_format as u32;
+        decode_caps.nBitDepthMinus8 = (video_format.bit_depth_luma - 8) as u32;
         do_within_context(&self.context, || unsafe {
             cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
         });
@@ -158,21 +151,21 @@ impl<'a> NvDecoder<'a> {
             panic!("Codec not supported on this GPU");
         }
 
-        if video_format.coded_width > decode_caps.nMaxWidth
-            || video_format.coded_height > decode_caps.nMaxHeight
+        if video_format.coded_size.width > decode_caps.nMaxWidth
+            || video_format.coded_size.height > decode_caps.nMaxHeight
         {
             panic!(
                 "Resolution: {}x{}
                 Max supported (wxh): {}x{}
                 Resolution not supported on this GPU",
-                video_format.coded_width,
-                video_format.coded_height,
+                video_format.coded_size.width,
+                video_format.coded_size.height,
                 decode_caps.nMaxWidth,
                 decode_caps.nMaxHeight
             );
         }
 
-        let mb_count = (video_format.coded_width >> 4) * (video_format.coded_height >> 4);
+        let mb_count = (video_format.coded_size.width >> 4) * (video_format.coded_size.height >> 4);
         if mb_count > decode_caps.nMaxMBCount {
             panic!(
                 "MBCount: {}
@@ -192,40 +185,27 @@ impl<'a> NvDecoder<'a> {
         // eCodec has been set in the constructor (for parser). Here it's set again for potential correction
         self.codec = video_format.codec.try_into().unwrap();
         self.chroma_format = video_format.chroma_format.try_into().unwrap();
-        self.bitdepth_minus_8 = video_format.bit_depth_luma_minus8 as i32;
+        self.bitdepth_minus_8 = (video_format.bit_depth_luma - 8) as i32;
         self.bpp = if self.bitdepth_minus_8 > 0 { 2 } else { 1 };
 
-        // Set the output surface format same as chroma format
-        if matches!(self.chroma_format, ChromaFormat::YUV420 | ChromaFormat::Monochrome) {
-            self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
-                SurfaceFormat::P016
-            } else {
-                SurfaceFormat::NV12
-            };
-        } else if matches!(self.chroma_format, ChromaFormat::YUV444) {
-            self.output_format = if video_format.bit_depth_luma_minus8 != 0 {
-                SurfaceFormat::YUV444_16bit
-            } else {
-                SurfaceFormat::YUV444
-            };
-        } else if matches!(self.chroma_format, ChromaFormat::YUV422) {
-            // no 4:2:2 output format supported yet so make 420 default
-            self.output_format = SurfaceFormat::NV12;
-        }
+        self.output_format = match (video_format.chroma_format, video_format.bit_depth_luma) {
+            (ChromaFormat::YUV420 | ChromaFormat::Monochrome, 8) => SurfaceFormat::NV12,
+            (ChromaFormat::YUV420 | ChromaFormat::Monochrome, _) => SurfaceFormat::P016,
+            (ChromaFormat::YUV444, 8) => SurfaceFormat::YUV444,
+            (ChromaFormat::YUV444, _) => SurfaceFormat::YUV444_16bit,
+            _ => self.output_format
+        };
 
-        // TODO(efyang) : create safe wrapper over VideoFormat
-        self.video_format = video_format;
 
         let mut video_decode_create_info = CUVIDDECODECREATEINFO::default();
-        video_decode_create_info.CodecType = video_format.codec;
-        video_decode_create_info.ChromaFormat = video_format.chroma_format;
+        video_decode_create_info.CodecType = video_format.codec as u32;
+        video_decode_create_info.ChromaFormat = video_format.chroma_format as u32;
         video_decode_create_info.OutputFormat = self.output_format.into();
-        video_decode_create_info.bitDepthMinus8 = video_format.bit_depth_luma_minus8 as u64;
-        if video_format.progressive_sequence != 0 {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Weave.into();
-        } else {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Adaptive.into();
-        }
+        video_decode_create_info.bitDepthMinus8 = (video_format.bit_depth_luma - 8) as u64;
+        video_decode_create_info.DeinterlaceMode = match video_format.scan {
+            Scan::Interlaced => DeinterlaceMode::Adaptive.into(),
+            Scan::Progressive => DeinterlaceMode::Weave.into(),
+        };
         video_decode_create_info.ulNumOutputSurfaces = 2;
         // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
         video_decode_create_info.ulCreationFlags = {
@@ -234,8 +214,8 @@ impl<'a> NvDecoder<'a> {
         };
         video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
         video_decode_create_info.vidLock = self.ctx_lock;
-        video_decode_create_info.ulWidth = video_format.coded_width as u64;
-        video_decode_create_info.ulHeight = video_format.coded_height as u64;
+        video_decode_create_info.ulWidth = video_format.coded_size.width as u64;
+        video_decode_create_info.ulHeight = video_format.coded_size.height as u64;
         // AV1 has max width/height of sequence in sequence header
         if matches!(video_format.codec.try_into().unwrap(), Codec::AV1)
             && video_format.seqhdr_data_length > 0
@@ -245,8 +225,8 @@ impl<'a> NvDecoder<'a> {
             todo!()
         }
 
-        self.max_width = std::cmp::max(self.max_width, video_format.coded_width);
-        self.max_height = std::cmp::max(self.max_height, video_format.coded_height);
+        self.max_width = std::cmp::max(self.max_width, video_format.coded_size.width);
+        self.max_height = std::cmp::max(self.max_height, video_format.coded_size.height);
         video_decode_create_info.ulMaxWidth = self.max_width as u64;
         video_decode_create_info.ulMaxHeight = self.max_height as u64;
 
@@ -256,8 +236,8 @@ impl<'a> NvDecoder<'a> {
             self.width = (video_format.display_area.right - video_format.display_area.left) as u32;
             self.luma_height =
                 (video_format.display_area.bottom - video_format.display_area.top) as u32;
-            video_decode_create_info.ulTargetWidth = video_format.coded_width as u64;
-            video_decode_create_info.ulTargetHeight = video_format.coded_height as u64;
+            video_decode_create_info.ulTargetWidth = video_format.coded_size.width as u64;
+            video_decode_create_info.ulTargetHeight = video_format.coded_size.height as u64;
         } else {
             if self.resize_dim.width != 0 && self.resize_dim.height != 0 {
                 video_decode_create_info.display_area.left = video_format.display_area.left as i16;
@@ -558,8 +538,8 @@ impl<'a> NvDecoder<'a> {
         codec: Codec,
         low_latency: bool,
         device_frame_pitched: bool,
-        crop_rect: Rect,
-        resize_dim: Dim,
+        crop_rect: Rect<usize>,
+        resize_dim: Dim<usize>,
         max_width: u32,
         max_height: u32,
         clock_rate: u32,

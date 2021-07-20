@@ -7,20 +7,20 @@ use nv_video_codec_sys as ffi;
 // *************** BASIC UTILITY TYPES ****************
 // ---------------------------------------------------------------
 /// Rect (inverted y)
-#[derive(Debug, Default)]
-pub struct Rect {
-    pub left: usize,
-    pub top: usize,
-    pub right: usize,
-    pub bottom: usize,
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub struct Rect<T> {
+    pub left: T,
+    pub top: T,
+    pub right: T,
+    pub bottom: T,
 }
 
 // ---------------------------------------------------------------
 /// Dimensions (pixels)
-#[derive(Debug, Default)]
-pub struct Dim {
-    pub width: usize,
-    pub height: usize,
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub struct Dim<T> {
+    pub width: T,
+    pub height: T,
 }
 
 // ---------------------------------------------------------------
@@ -29,7 +29,7 @@ pub struct Dim {
 // ---------------------------------------------------------------
 // Chroma Format
 ffi_enum! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
     pub enum ChromaFormat = cudaVideoChromaFormat_enum
     cvt_err: ChromaFormatConvertError
     {
@@ -43,7 +43,7 @@ ffi_enum! {
 // ---------------------------------------------------------------
 // Video Codec
 ffi_enum! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
     pub enum Codec = cudaVideoCodec_enum
     cvt_err: CodecConvertError
     {
