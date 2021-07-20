@@ -44,9 +44,8 @@ pub trait NvEncoder {
 
     fn get_frame_size(&self) -> NvEncoderResult<u32>;
 
-    // unimplemented for now
     fn create_default_encoder_params(
-        &self,
+        &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
         tuning_info: NV_ENC_TUNING_INFO,
@@ -163,7 +162,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             }
 
             fn create_default_encoder_params(
-                &self,
+                &mut self,
                 codec_guid: nv_video_codec_sys::GUID,
                 preset_guid: nv_video_codec_sys::GUID,
                 tuning_info: nv_video_codec_sys::NV_ENC_TUNING_INFO,

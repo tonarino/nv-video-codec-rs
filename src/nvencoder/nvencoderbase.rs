@@ -3,15 +3,15 @@ use std::marker::PhantomData;
 
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, GUID, NVENCAPI_MAJOR_VERSION,
-    NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
-    NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID, NV_ENC_CONFIG,
-    NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE,
-    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
-    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
-    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
-    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_REGISTERED_PTR,
-    NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS, _NV_ENC_PIC_STRUCT,
-    _NV_ENC_QP,
+    NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH,
+    NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS, NV_ENC_CAPS_PARAM,
+    NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
+    NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
+    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
+    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
+    NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
+    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
+    _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
 
 use super::{
@@ -359,7 +359,7 @@ where
     }
 
     fn create_default_encoder_params(
-        &self,
+        &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
         tuning_info: NV_ENC_TUNING_INFO,
@@ -368,36 +368,114 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        // let mut encode_config =
-        //     NV_ENC_CONFIG { version: (7 << 16 | 0x7 << 28 | 1 << 31), ..Default::default() };
+        let mut encode_config = NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..Default::default() };
 
         // nvpipe doesn't even use this
-        todo!()
-        // Ok(NV_ENC_INITIALIZE_PARAMS {
-        //     version: (5 << 16 | 0x7 << 28 | 1 << 31), // TODO(efyang) actual const func for this
-        //     encodeGUID: codec_guid,
-        //     presetGUID: preset_guid,
-        //     encodeWidth: self.width,
-        //     encodeHeight: self.height,
-        //     darWidth: self.width,
-        //     darHeight: self.height,
-        //     frameRateNum: 30, // TODO(efyang): possible optimization?
-        //     frameRateDen: 1,
-        //     enablePTD: 1,
-        //     encodeConfig: &mut encode_config,
-        //     maxEncodeWidth: self.width,
-        //     maxEncodeHeight: self.height,
-        //     _bitfield_1: NV_ENC_INITIALIZE_PARAMS::new_bitfield_1(
-        //         0,
-        //         0,
-        //         0,
-        //         self.motion_estimation_only as u32,
-        //         0,
-        //         self.output_in_video_memory as u32,
-        //         0,
-        //     ),
-        //     ..Default::default()
-        // })
+        let mut initialize_params = NV_ENC_INITIALIZE_PARAMS {
+            version: NV_ENC_INITIALIZE_PARAMS_VER, // TODO(efyang) actual const func for this
+            encodeGUID: codec_guid,
+            presetGUID: preset_guid,
+            encodeWidth: self.width,
+            encodeHeight: self.height,
+            darWidth: self.width,
+            darHeight: self.height,
+            frameRateNum: 30, // TODO(efyang): possible optimization?
+            frameRateDen: 1,
+            enablePTD: 1,
+            encodeConfig: &mut encode_config,
+            maxEncodeWidth: self.width,
+            maxEncodeHeight: self.height,
+            ..Default::default()
+        };
+
+        initialize_params.set_enableMEOnlyMode(self.motion_estimation_only as u32);
+        initialize_params.set_enableOutputInVidmem(self.output_in_video_memory as u32);
+
+        let mut preset_config = NV_ENC_PRESET_CONFIG {
+            version: NV_ENC_PRESET_CONFIG_VER,
+            presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..Default::default() },
+            ..Default::default()
+        };
+        unsafe {
+            self.nv_encode_api_function_list.nvEncGetEncodePresetConfig.unwrap()(
+                self.encoder_handle as *mut _,
+                codec_guid,
+                preset_guid,
+                &mut preset_config,
+            )
+            .into_nvenc_result()?;
+        }
+
+        unsafe {
+            *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+            (*initialize_params.encodeConfig).frameIntervalP = 1;
+            (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
+            (*initialize_params.encodeConfig).rcParams.rateControlMode =
+                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+        }
+
+        if self.motion_estimation_only {
+            initialize_params.tuningInfo = tuning_info;
+            let mut preset_config = NV_ENC_PRESET_CONFIG {
+                version: NV_ENC_PRESET_CONFIG_VER,
+                presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..Default::default() },
+                ..Default::default()
+            };
+            unsafe {
+                self.nv_encode_api_function_list.nvEncGetEncodePresetConfigEx.unwrap()(
+                    self.encoder_handle as *mut _,
+                    codec_guid,
+                    preset_guid,
+                    tuning_info,
+                    &mut preset_config,
+                )
+                .into_nvenc_result()?;
+                *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+            }
+        } else {
+            self.encode_config.version = NV_ENC_CONFIG_VER;
+            self.encode_config.rcParams.rateControlMode =
+                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+            self.encode_config.rcParams.constQP =
+                NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
+        }
+
+        unsafe {
+            if initialize_params.encodeGUID == NV_ENC_CODEC_H264_GUID {
+                if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
+                    (*initialize_params.encodeConfig)
+                        .encodeCodecConfig
+                        .h264Config
+                        .chromaFormatIDC = 3;
+                }
+                (*initialize_params.encodeConfig).encodeCodecConfig.h264Config.idrPeriod =
+                    (*initialize_params.encodeConfig).gopLength;
+            } else if initialize_params.encodeGUID == NV_ENC_CODEC_HEVC_GUID {
+                (*initialize_params.encodeConfig)
+                    .encodeCodecConfig
+                    .hevcConfig
+                    .set_pixelBitDepthMinus8(
+                        if matches!(
+                            self.buffer_format,
+                            BufferFormat::YUV420_10BIT | BufferFormat::YUV444_10BIT
+                        ) {
+                            2
+                        } else {
+                            0
+                        },
+                    );
+                if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
+                    (*initialize_params.encodeConfig)
+                        .encodeCodecConfig
+                        .hevcConfig
+                        .set_chromaFormatIDC(3);
+                }
+                (*initialize_params.encodeConfig).encodeCodecConfig.hevcConfig.idrPeriod =
+                    (*initialize_params.encodeConfig).gopLength;
+            }
+        }
+
+        Ok(initialize_params)
     }
 
     fn get_initialize_params(&self) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
