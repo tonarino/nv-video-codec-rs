@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2"
+# pending https://github.com/rust-lang/rfcs/issues/2783
+num_enum = "0.5"
 nv-video-codec-sys = { path = "nv-video-codec-sys" }
 parking_lot = "0.11"
 rustacuda = "0.1"
