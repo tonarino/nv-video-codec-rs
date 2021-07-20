@@ -2,10 +2,11 @@ pub mod builder;
 pub mod error;
 pub mod experimental_fwrapper;
 mod nvencoderbase;
+#[macro_use]
+pub mod traits;
 pub mod nvencodercuda;
 pub mod nvencodergl;
 pub(super) mod resource_manager;
-pub mod traits;
 pub mod types;
 
 pub use builder::*;

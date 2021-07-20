@@ -4,9 +4,7 @@ use super::{
 };
 use nv_video_codec_sys::{NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE};
 
-pub struct NvEncoderGL {
-    encoder: NvEncoderBase<NvEncoderGLResourceManager>,
-}
+impl_nvencoder_wrapper_type!(NvEncoderGL, NvEncoderGLResourceManager);
 
 impl NvEncoderGL {
     pub fn new(

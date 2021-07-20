@@ -99,9 +99,6 @@ impl<ResourceManager> NvEncoder for NvEncoderBase<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
-    /// This function is used to initialize the encoder session.
-    /// Application must call this function to initialize the encoder, before
-    /// starting to encode any frames.
     fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
@@ -233,10 +230,6 @@ where
         Ok(())
     }
 
-    /// This function is used to destroy the encoder session.
-    /// Application must call this function to destroy the encoder session and
-    /// clean up any allocated resources. The application must call EndEncode()
-    /// function to get any queued encoded frames before calling DestroyEncoder().
     fn destroy_encoder(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
@@ -252,20 +245,12 @@ where
     //     unimplemented!()
     // }
 
-    /// This function is used to get the next available input buffer.
-    /// Applications must call this function to obtain a pointer to the next
-    /// input buffer. The application must copy the uncompressed data to the
-    /// input buffer and then call EncodeFrame() function to encode it.
     // TODO: make this (and get_next_reference_frame) optional
     fn get_next_input_frame(&mut self) -> &NvEncInputFrame {
         // TODO(efyang): make this return value lifetime'd
         &self.input_frames[(self.to_send % self.encoder_buffer) as usize]
     }
 
-    /// This function is used to encode a frame.
-    /// Applications must call EncodeFrame() function to encode the uncompressed
-    /// data, which has been copied to an input buffer obtained from the
-    /// GetNextInputFrame() function.
     fn encode_frame(
         &mut self,
         packet: &mut Vec<Vec<u8>>,
@@ -297,11 +282,6 @@ where
         unimplemented!()
     }
 
-    /// This function to flush the encoder queue.
-    /// The encoder might be queuing frames for B picture encoding or lookahead;
-    /// the application must call EndEncode() to get all the queued encoded frames
-    /// from the encoder. The application must call this function before destroying
-    /// an encoder session.
     fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -313,9 +293,6 @@ where
         unimplemented!()
     }
 
-    /// This function is used to query hardware encoder capabilities.
-    /// Applications can call this function to query capabilities like maximum encode
-    /// dimensions, support for lookahead or the ME-only mode etc.
     fn get_capability_value(
         &mut self,
         codec_guid: GUID,
@@ -344,29 +321,22 @@ where
         Ok((caps_param.capsToQuery, v))
     }
 
-    /// This function is used to get the current device on which encoder is running.
     fn get_device(&self) -> Option<&Device> {
         unsafe { self.device.as_ref() }
     }
 
-    /// This function is used to get the current device type which encoder is running.
     fn get_device_type(&self) -> NV_ENC_DEVICE_TYPE {
         self.device_type
     }
 
-    /// This function is used to get the current encode width.
-    /// The encode width can be modified by Reconfigure() function.
     fn get_encode_width(&self) -> u32 {
         self.width
     }
 
-    /// This function is used to get the current encode height.
-    /// The encode width can be modified by Reconfigure() function.
     fn get_encode_height(&self) -> u32 {
         self.height
     }
 
-    /// This function is used to get the current frame size based on pixel format.
     fn get_frame_size(&self) -> NvEncoderResult<u32> {
         match self.get_pixel_format() {
             BufferFormat::YV12 | BufferFormat::IYUV | BufferFormat::NV12 => Ok(self

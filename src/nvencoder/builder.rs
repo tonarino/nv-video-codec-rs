@@ -1,5 +1,3 @@
-use gl;
-
 use super::{BufferFormat, NvEncoderError, NvEncoderGL};
 // use rustacuda::context::Context;
 
