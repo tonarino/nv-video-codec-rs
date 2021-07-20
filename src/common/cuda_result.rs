@@ -84,6 +84,7 @@ pub enum CudaError {
     Timeout,
     GraphExecUpdateFailure,
     Unknown,
+    Unrecognized(u32),
 }
 
 pub trait IntoCudaResult<T> {
@@ -239,6 +240,7 @@ impl IntoCudaResult<()> for cudaError_enum {
                 Err(CudaError::GraphExecUpdateFailure)
             },
             cudaError_enum::CUDA_ERROR_UNKNOWN => Err(CudaError::Unknown),
+            unknown_cuda_err => Err(CudaError::Unrecognized(unknown_cuda_err as u32)),
         }
     }
 }
