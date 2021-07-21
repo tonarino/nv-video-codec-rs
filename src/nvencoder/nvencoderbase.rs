@@ -524,6 +524,8 @@ where
     ) -> NvEncoderResult<Self> {
         let enc_api = Self::load_nv_enc_api()?;
 
+        println!("made enc_api");
+
         if enc_api.nvEncOpenEncodeSession.is_none() {
             return Err(NvEncError::NoEncodeDevice.into());
         }
@@ -539,6 +541,7 @@ where
         let mut encoder_handle: *mut EncoderHandle = std::ptr::null_mut();
         let encoder_handle_ptr: *mut *mut EncoderHandle = &mut encoder_handle;
 
+        println!("before nvEncOpenEncodeSessionEx done");
         unsafe {
             enc_api.nvEncOpenEncodeSessionEx.unwrap()(
                 &mut encode_session_ex_params as *mut _,
@@ -546,6 +549,8 @@ where
             )
             .into_nvenc_result()?;
         }
+
+        println!("nvEncOpenEncodeSessionEx done");
 
         Ok(Self {
             motion_estimation_only,
