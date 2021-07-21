@@ -14,6 +14,8 @@ use nv_video_codec_sys::{
     _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
 
+use crate::nvencoder::defaults::CustomDefault;
+
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoder, NvEncoderError, NvEncoderResult,
@@ -574,7 +576,7 @@ where
             device,
             device_type,
             initialize_params: NV_ENC_INITIALIZE_PARAMS::default(),
-            encode_config: NV_ENC_CONFIG::default(),
+            encode_config: CustomDefault::default(),
             encoder_initialized: false,
             extra_output_delay,
             bitstream_output_buffer: Vec::new(),
@@ -588,7 +590,7 @@ where
     // Protected
 
     pub(super) fn is_hw_encoder_initialized(&mut self) -> bool {
-        unimplemented!()
+        !self.encoder_handle.is_null() && self.encoder_initialized
     }
 
     pub(super) fn register_input_resources(

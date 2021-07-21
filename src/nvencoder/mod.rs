@@ -4,6 +4,7 @@ pub mod experimental_fwrapper;
 mod nvencoderbase;
 #[macro_use]
 pub mod traits;
+mod defaults;
 pub mod nvencodercuda;
 pub mod nvencodergl;
 pub(super) mod resource_manager;
