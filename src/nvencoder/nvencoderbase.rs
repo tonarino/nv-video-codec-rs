@@ -37,6 +37,7 @@ const NV_ENC_LOCK_BITSTREAM_VER: u32 = nvenc_api_struct_version(1);
 const NV_ENC_CREATE_BITSTREAM_BUFFER_VER: u32 = nvenc_api_struct_version(1);
 const NV_ENC_CREATE_MV_BUFFER_VER: u32 = nvenc_api_struct_version(1);
 const NV_ENC_MAP_INPUT_RESOURCE_VER: u32 = nvenc_api_struct_version(4);
+const NV_ENC_REGISTER_RESOURCE_VER: u32 = nvenc_api_struct_version(3);
 
 #[repr(C)]
 pub(super) struct EncoderHandle {
@@ -291,7 +292,7 @@ where
                 encode_status?;
             },
         }
-        unimplemented!()
+        Ok(())
     }
 
     fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> NvEncoderResult<()> {
@@ -302,7 +303,7 @@ where
         self.send_eos()?;
 
         self.get_encoded_packet(packet, false)?;
-        unimplemented!()
+        Ok(())
     }
 
     fn get_capability_value(
@@ -410,7 +411,9 @@ where
             ..CustomDefault::default()
         };
         unsafe {
-            self.nv_encode_api_function_list.nvEncGetEncodePresetConfig.unwrap()(
+            self.nv_encode_api_function_list
+                .nvEncGetEncodePresetConfig
+                .expect("Invalid nvEncGetEncodePresetConfig ptr")(
                 self.encoder_handle as *mut _,
                 codec_guid,
                 preset_guid,
@@ -427,11 +430,11 @@ where
                 NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
         }
 
-        if self.motion_estimation_only {
+        if !self.motion_estimation_only {
             initialize_params.tuningInfo = tuning_info;
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
-                presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..Default::default() },
+                presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
                 ..CustomDefault::default()
             };
             unsafe {
@@ -647,7 +650,7 @@ where
                 self.input_frames.push(registered_input_frame);
             }
         }
-        unimplemented!()
+        Ok(())
     }
 
     pub(super) fn unregister_input_resources(&mut self) -> NvEncoderResult<()> {
@@ -678,6 +681,7 @@ where
         self.mapped_input_buffers.clear();
 
         for &registered_resource in self.registered_resources.iter().filter(|&p| !p.is_null()) {
+            dbg!(registered_resource);
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
                     self.encoder_handle as *mut _,
@@ -714,7 +718,8 @@ where
         buffer_format: BufferFormat,
         buffer_usage: NV_ENC_BUFFER_USAGE,
     ) -> NvEncoderResult<NV_ENC_REGISTERED_PTR> {
-        let mut register_resource = NV_ENC_REGISTER_RESOURCE {
+        let register_resource = NV_ENC_REGISTER_RESOURCE {
+            version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
             resourceToRegister: buffer as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut _,
             width,
@@ -724,13 +729,16 @@ where
             bufferUsage: buffer_usage,
             ..Default::default()
         };
+        let mut boxed_registered_resource = Box::new(register_resource);
         unsafe {
             self.nv_encode_api_function_list.nvEncRegisterResource.unwrap()(
                 self.encoder_handle as *mut _,
-                &mut register_resource,
+                boxed_registered_resource.as_mut() as *mut _,
             )
             .into_nvenc_result()?;
         }
+        // TODO: fix this: check if nvcodec actually frees this, if not need to keep somewhere
+        std::mem::forget(boxed_registered_resource);
         Ok(register_resource.registeredResource)
     }
 
@@ -1084,7 +1092,7 @@ where
 {
     fn drop(&mut self) {
         ResourceManager::release_input_buffers(self).unwrap();
-        self.destroy_hw_encoder().unwrap();
+        self.destroy_hw_encoder().expect("failed to destroy hw encoder");
     }
 }
 
