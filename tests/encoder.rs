@@ -6,9 +6,7 @@ extern crate simple_logger;
 #[macro_use]
 mod utils;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix};
-use nv_video_codec_sys::{
-    NV_ENC_CODEC_HEVC_GUID, NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID, NV_ENC_TUNING_INFO,
-};
+use nv_video_codec_sys::{guids, NV_ENC_TUNING_INFO};
 use utils::init_cuda_ctx;
 
 use std::time::Duration;
@@ -43,14 +41,12 @@ fn init_encoder() -> Result<()> {
 #[test]
 fn create_encoder() -> Result<()> {
     let mut encoder = util_create_encoder()?;
-    unsafe {
-        let params = encoder.create_default_encoder_params(
-            NV_ENC_CODEC_HEVC_GUID,
-            NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID,
-            NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_UNDEFINED,
-        )?;
-        encoder.create_encoder(&params)?;
-    }
+    let params = encoder.create_default_encoder_params(
+        guids::NV_ENC_CODEC_H264_GUID,
+        guids::NV_ENC_PRESET_P3_GUID,
+        NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
+    )?;
+    encoder.create_encoder(&params)?;
 
     Ok(())
 }
