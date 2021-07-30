@@ -112,11 +112,6 @@ where
             return Err(NvEncError::InvalidParam.into());
         }
 
-        dbg!(
-            guids::NV_ENC_CODEC_H264_GUID,
-            guids::NV_ENC_CODEC_HEVC_GUID,
-            guids::NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID
-        );
         unsafe {
             if encoder_params.encodeGUID != guids::NV_ENC_CODEC_H264_GUID
                 && encoder_params.encodeGUID != guids::NV_ENC_CODEC_HEVC_GUID
@@ -198,11 +193,8 @@ where
                     _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
             }
         }
-        println!("Ok3");
         self.initialize_params.encodeConfig = &mut self.encode_config;
 
-        assert!(self.nv_encode_api_function_list.nvEncInitializeEncoder.is_some());
-        println!("Ok3.5");
         unsafe {
             self.nv_encode_api_function_list.nvEncInitializeEncoder.unwrap()(
                 self.encoder_handle as *mut _,
@@ -210,7 +202,6 @@ where
             )
             .into_nvenc_result()?;
         }
-        println!("Ok4");
 
         self.encoder_initialized = true;
         self.width = self.initialize_params.encodeWidth;
@@ -259,9 +250,9 @@ where
     // }
 
     // TODO: make this (and get_next_reference_frame) optional
-    fn get_next_input_frame(&mut self) -> &NvEncInputFrame {
+    fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame {
         // TODO(efyang): make this return value lifetime'd
-        &self.input_frames[(self.to_send % self.encoder_buffer) as usize]
+        &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize]
     }
 
     fn encode_frame(
@@ -274,7 +265,7 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        let buffer_index = (self.to_send % self.encoder_buffer) as u32;
+        let buffer_index = (self.to_send as u32) % (self.encoder_buffer as u32);
         self.map_resources(buffer_index)?;
 
         let encode_status = self.do_encode(
@@ -540,8 +531,6 @@ where
     ) -> NvEncoderResult<Self> {
         let enc_api = Self::load_nv_enc_api()?;
 
-        println!("made enc_api");
-
         if enc_api.nvEncOpenEncodeSession.is_none() {
             return Err(NvEncError::NoEncodeDevice.into());
         }
@@ -557,7 +546,6 @@ where
         let mut encoder_handle: *mut EncoderHandle = std::ptr::null_mut();
         let encoder_handle_ptr: *mut *mut EncoderHandle = &mut encoder_handle;
 
-        println!("before nvEncOpenEncodeSessionEx done");
         unsafe {
             enc_api.nvEncOpenEncodeSessionEx.unwrap()(
                 &mut encode_session_ex_params as *mut _,
@@ -565,8 +553,6 @@ where
             )
             .into_nvenc_result()?;
         }
-
-        println!("nvEncOpenEncodeSessionEx done");
 
         Ok(Self {
             motion_estimation_only,
@@ -670,6 +656,7 @@ where
         self.mapped_ref_buffers.clear();
 
         for &mapped_input_buffer in self.mapped_input_buffers.iter().filter(|p| !p.is_null()) {
+            dbg!(mapped_input_buffer);
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
                     self.encoder_handle as *mut _,
@@ -680,8 +667,7 @@ where
         }
         self.mapped_input_buffers.clear();
 
-        for &registered_resource in self.registered_resources.iter().filter(|&p| !p.is_null()) {
-            dbg!(registered_resource);
+        for &registered_resource in self.registered_resources.iter().filter(|p| !p.is_null()) {
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
                     self.encoder_handle as *mut _,
@@ -693,7 +679,7 @@ where
         self.registered_resources.clear();
 
         for &registered_resource_for_reference in
-            self.registered_resources_for_reference.iter().filter(|&p| !p.is_null())
+            self.registered_resources_for_reference.iter().filter(|p| !p.is_null())
         {
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
@@ -718,7 +704,7 @@ where
         buffer_format: BufferFormat,
         buffer_usage: NV_ENC_BUFFER_USAGE,
     ) -> NvEncoderResult<NV_ENC_REGISTERED_PTR> {
-        let register_resource = NV_ENC_REGISTER_RESOURCE {
+        let mut register_resource = Box::new(NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
             resourceToRegister: buffer as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut _,
@@ -728,17 +714,14 @@ where
             bufferFormat: buffer_format.into(),
             bufferUsage: buffer_usage,
             ..Default::default()
-        };
-        let mut boxed_registered_resource = Box::new(register_resource);
+        });
         unsafe {
             self.nv_encode_api_function_list.nvEncRegisterResource.unwrap()(
                 self.encoder_handle as *mut _,
-                boxed_registered_resource.as_mut() as *mut _,
+                register_resource.as_mut() as *mut _,
             )
             .into_nvenc_result()?;
         }
-        // TODO: fix this: check if nvcodec actually frees this, if not need to keep somewhere
-        std::mem::forget(boxed_registered_resource);
         Ok(register_resource.registeredResource)
     }
 
@@ -832,6 +815,7 @@ where
             )
             .into_nvenc_result()?;
         }
+        dbg!(map_input_resource.mappedResource);
         self.mapped_input_buffers[buffer_index as usize] = map_input_resource.mappedResource;
 
         if self.motion_estimation_only {
@@ -1105,4 +1089,11 @@ pub struct NvEncInputFrame {
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+}
+
+// TODO : remove this hack
+impl NvEncInputFrame {
+    pub fn input_ptr_as_gltex(&self) -> *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+        self.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
+    }
 }

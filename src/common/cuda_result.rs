@@ -98,6 +98,7 @@ impl<T> IntoCudaResult<T> for CudaResult<T> {
 }
 
 impl IntoCudaResult<()> for cudaError_enum {
+    #[allow(unreachable_patterns)]
     fn into_cuda_result(self) -> CudaResult<()> {
         match self {
             cudaError_enum::CUDA_SUCCESS => Ok(()),
@@ -240,6 +241,7 @@ impl IntoCudaResult<()> for cudaError_enum {
                 Err(CudaError::GraphExecUpdateFailure)
             },
             cudaError_enum::CUDA_ERROR_UNKNOWN => Err(CudaError::Unknown),
+            // TODO: better way to do nonexhaustive without #[allow]
             unknown_cuda_err => Err(CudaError::Unrecognized(unknown_cuda_err as u32)),
         }
     }

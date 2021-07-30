@@ -18,7 +18,7 @@ pub trait NvEncoder {
     // not implemented for now
     // pub fn reconfigure(&mut self, ) -> EncoderResult<bool>;
 
-    fn get_next_input_frame(&mut self) -> &NvEncInputFrame;
+    fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
 
     fn encode_frame(
         &mut self,
@@ -98,7 +98,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             /// input buffer and then call EncodeFrame() function to encode it.
             fn get_next_input_frame(
                 &mut self,
-            ) -> &crate::nvencoder::nvencoderbase::NvEncInputFrame {
+            ) -> &mut crate::nvencoder::nvencoderbase::NvEncInputFrame {
                 self.encoder.get_next_input_frame()
             }
 
