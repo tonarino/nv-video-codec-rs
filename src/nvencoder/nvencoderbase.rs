@@ -595,7 +595,7 @@ where
 
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [NV_ENC_INPUT_RESOURCE_OPENGL_TEX], // TODO: make this not mut
+        input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -604,6 +604,7 @@ where
         reference_frame: bool,
     ) -> NvEncoderResult<()> {
         for input_frame in input_frames.iter_mut() {
+            dbg!(input_frame as *mut _);
             let registered_ptr = self.register_resource(
                 input_frame,
                 resource_type,
@@ -613,13 +614,18 @@ where
                 buffer_format,
                 NV_ENC_BUFFER_USAGE::NV_ENC_INPUT_IMAGE,
             )?;
+            dbg!(input_frame as *mut _);
+            dbg!(registered_ptr);
 
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
+            let inpf = input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input;
+            dbg!(inpf);
             // TODO(efyang): make input_ptr restricted as an enum, or just straight up opengl tex
             let registered_input_frame = NvEncInputFrame {
-                input_ptr: input_frame as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input,
+                input_ptr: input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
+                    as *mut Input,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,
@@ -667,8 +673,13 @@ where
         }
         self.mapped_input_buffers.clear();
 
+        dbg!(&self.input_frames as *const _);
+        dbg!(&self.input_frames);
         for &registered_resource in self.registered_resources.iter().filter(|p| !p.is_null()) {
+            dbg!(registered_resource);
             unsafe {
+                let d = *(registered_resource as *mut [u32; 32]);
+                dbg!(d);
                 self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
                     self.encoder_handle as *mut _,
                     registered_resource,
@@ -704,7 +715,7 @@ where
         buffer_format: BufferFormat,
         buffer_usage: NV_ENC_BUFFER_USAGE,
     ) -> NvEncoderResult<NV_ENC_REGISTERED_PTR> {
-        let mut register_resource = Box::new(NV_ENC_REGISTER_RESOURCE {
+        let mut register_resource = NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
             resourceToRegister: buffer as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut _,
@@ -714,15 +725,16 @@ where
             bufferFormat: buffer_format.into(),
             bufferUsage: buffer_usage,
             ..Default::default()
-        });
+        };
         unsafe {
             self.nv_encode_api_function_list.nvEncRegisterResource.unwrap()(
                 self.encoder_handle as *mut _,
-                register_resource.as_mut() as *mut _,
+                &mut register_resource as *mut _,
             )
             .into_nvenc_result()?;
         }
-        Ok(register_resource.registeredResource)
+        let ptr = register_resource.registeredResource;
+        Ok(ptr)
     }
 
     pub(super) fn get_max_encode_width(&self) -> u32 {
@@ -1081,6 +1093,7 @@ where
 }
 
 // TODO: clean this struct up
+#[derive(Debug)]
 pub struct NvEncInputFrame {
     pub(super) input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],

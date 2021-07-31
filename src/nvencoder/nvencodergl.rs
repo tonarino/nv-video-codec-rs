@@ -57,6 +57,7 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
     }
 }
 
+static mut ALLOCATED_FRAMES: Vec<Vec<Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>>> = Vec::new();
 pub(super) struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
@@ -102,23 +103,28 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                     gl::BindTexture(gl::TEXTURE_RECTANGLE, 0);
                 }
 
-                let resource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+                let resource = Box::new(NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
                     texture: tex,
                     target: gl::TEXTURE_RECTANGLE,
-                };
+                });
 
                 input_frames.push(resource);
             }
 
-            encoder.register_input_resources(
-                &mut input_frames,
-                nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
-                encoder.get_max_encode_width(),
-                encoder.get_max_encode_height(),
-                pixel_format.get_width_in_bytes(encoder.get_max_encode_width())?,
-                pixel_format,
-                count == 1
-            )?;
+            unsafe {
+                // for testing, and only run in single-threaded test - so mutable static should be perfectly safe
+                ALLOCATED_FRAMES.push(input_frames);
+
+                encoder.register_input_resources(
+                    &mut ALLOCATED_FRAMES[ALLOCATED_FRAMES.len() - 1],
+                    nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
+                    encoder.get_max_encode_width(),
+                    encoder.get_max_encode_height(),
+                    pixel_format.get_width_in_bytes(encoder.get_max_encode_width())?,
+                    pixel_format,
+                    count == 1
+                )?;
+            }
         }
         Ok(())
     }
