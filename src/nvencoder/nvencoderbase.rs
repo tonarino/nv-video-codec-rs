@@ -11,7 +11,7 @@ use nv_video_codec_sys::{
     NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
     NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
-    _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
+    _NV_ENC_PIC_STRUCT, NV_ENC_PIC_TYPE, _NV_ENC_QP,
 };
 
 use crate::nvencoder::defaults::CustomDefault;
@@ -257,7 +257,7 @@ where
 
     fn encode_frame(
         &mut self,
-        packet: &mut Vec<Vec<u8>>,
+        packet: &mut Vec<&[u8]>,
         pic_params: Option<NV_ENC_PIC_PARAMS>,
     ) -> NvEncoderResult<()> {
         packet.clear();
@@ -286,7 +286,7 @@ where
         Ok(())
     }
 
-    fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> NvEncoderResult<()> {
+    fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
             return Err(NvEncError::EncoderNotInitialized.into());
@@ -604,7 +604,6 @@ where
         reference_frame: bool,
     ) -> NvEncoderResult<()> {
         for input_frame in input_frames.iter_mut() {
-            dbg!(input_frame as *mut _);
             let registered_ptr = self.register_resource(
                 input_frame,
                 resource_type,
@@ -614,14 +613,11 @@ where
                 buffer_format,
                 NV_ENC_BUFFER_USAGE::NV_ENC_INPUT_IMAGE,
             )?;
-            dbg!(input_frame as *mut _);
-            dbg!(registered_ptr);
 
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
             let inpf = input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input;
-            dbg!(inpf);
             // TODO(efyang): make input_ptr restricted as an enum, or just straight up opengl tex
             let registered_input_frame = NvEncInputFrame {
                 input_ptr: input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
@@ -662,7 +658,6 @@ where
         self.mapped_ref_buffers.clear();
 
         for &mapped_input_buffer in self.mapped_input_buffers.iter().filter(|p| !p.is_null()) {
-            dbg!(mapped_input_buffer);
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnmapInputResource.unwrap()(
                     self.encoder_handle as *mut _,
@@ -673,13 +668,9 @@ where
         }
         self.mapped_input_buffers.clear();
 
-        dbg!(&self.input_frames as *const _);
-        dbg!(&self.input_frames);
         for &registered_resource in self.registered_resources.iter().filter(|p| !p.is_null()) {
-            dbg!(registered_resource);
             unsafe {
                 let d = *(registered_resource as *mut [u32; 32]);
-                dbg!(d);
                 self.nv_encode_api_function_list.nvEncUnregisterResource.unwrap()(
                     self.encoder_handle as *mut _,
                     registered_resource,
@@ -767,11 +758,14 @@ where
             inputWidth: self.get_encode_width(),
             inputHeight: self.get_encode_height(),
             outputBitstream: output_buffer,
+            // Note: The default value is NV_ENC_PIC_TYPE_P.
+            // pictureType: NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_IDF,
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
             ..pic_params.unwrap_or_default()
         };
+
         unsafe {
             self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
                 self.encoder_handle as *mut _,
@@ -827,7 +821,6 @@ where
             )
             .into_nvenc_result()?;
         }
-        dbg!(map_input_resource.mappedResource);
         self.mapped_input_buffers[buffer_index as usize] = map_input_resource.mappedResource;
 
         if self.motion_estimation_only {
@@ -903,12 +896,12 @@ where
     // output_buffer is self.bitstream_output_buffer for now, as that's what is used in the code we're actually using
     fn get_encoded_packet(
         &mut self,
-        packet: &mut Vec<Vec<u8>>,
+        packet: &mut Vec<&[u8]>,
         output_delay: bool,
     ) -> NvEncoderResult<()> {
-        let mut i = 0;
         let end =
             if self.output_delay != 0 { self.to_send - self.output_delay } else { self.to_send };
+        dbg!(self.output_delay, self.to_send, self.got, end, self.got < end);
         while self.got < end {
             let packet_index = (self.got % self.encoder_buffer) as usize;
             self.wait_for_completion_event(packet_index as i32);
@@ -927,19 +920,12 @@ where
                 .into_nvenc_result()?;
             }
 
-            let data_ptr = lock_bitstream_data.bitstreamBufferPtr as *mut u8;
-            if packet.len() < i + 1 {
-                packet.push(Vec::new());
-            }
-            packet[i].clear();
             unsafe {
-                packet[i] = Vec::from_raw_parts(
-                    data_ptr,
+                packet.push(std::slice::from_raw_parts(
+                    lock_bitstream_data.bitstreamBufferPtr as *mut u8,
                     lock_bitstream_data.bitstreamSizeInBytes as usize,
-                    lock_bitstream_data.bitstreamSizeInBytes as usize,
-                );
+                ));
             }
-            i += 1;
 
             unsafe {
                 self.nv_encode_api_function_list.nvEncUnlockBitstream.unwrap()(
