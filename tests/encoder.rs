@@ -52,6 +52,10 @@ fn create_encoder() -> Result<()> {
     )?;
     encoder.create_encoder(&params)?;
 
+    // Make sure the encoder is dropped before the context.
+    // TODO: Implement Drop for the encoder & context pair to ensure deallocation order.
+    drop(encoder);
+
     Ok(())
 }
 
@@ -75,28 +79,37 @@ fn encode_basic_grayscale() -> Result<()> {
     let resource = encoder_input_frame.input_ptr_as_gltex();
     // TODO: remove these hacks
     unsafe {
+        // target is gl::TEXTURE_RECTANGLE.
+        dbg!((*resource).target, (*resource).texture, gl::TEXTURE_2D);
+
         gl::BindTexture((*resource).target, (*resource).texture);
         gl::TexSubImage2D(
             (*resource).target,
-            0,
-            0,
-            0,
-            1280,
-            720 * 3 / 2,
-            gl::RED,
-            gl::UNSIGNED_BYTE,
-            host_frame.as_mut_ptr() as *mut _,
+            0, // level
+            0, // x offset
+            0, // y offset
+            1280, // width
+            720 * 3 / 2, // height
+            gl::RED, // format (single-channel)
+            gl::UNSIGNED_BYTE, // type
+            host_frame.as_mut_ptr() as *mut _, // data
         );
         gl::BindTexture((*resource).target, 0);
     }
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, None)?;
-    encoder.end_encode(&mut packet)?;
+    // Note: end_encode() clears packet.
+    // encoder.end_encode(&mut packet)?;
+    dbg!(packet.len());
 
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in packet {
         f.write_all(&frame)?;
     }
+
+    // Make sure the encoder is dropped before the context.
+    // TODO: Implement Drop for the encoder & context pair to ensure deallocation order.
+    drop(encoder);
 
     Ok(())
 }

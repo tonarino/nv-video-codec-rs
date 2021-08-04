@@ -22,11 +22,11 @@ pub trait NvEncoder {
 
     fn encode_frame(
         &mut self,
-        packet: &mut Vec<Vec<u8>>,
+        packet: &mut Vec<&[u8]>,
         pic_params: Option<NV_ENC_PIC_PARAMS>,
     ) -> NvEncoderResult<()>;
 
-    fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> NvEncoderResult<()>;
+    fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()>;
 
     fn get_capability_value(
         &mut self,
@@ -108,7 +108,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             /// GetNextInputFrame() function.
             fn encode_frame(
                 &mut self,
-                packet: &mut Vec<Vec<u8>>,
+                packet: &mut Vec<&[u8]>,
                 pic_params: Option<nv_video_codec_sys::NV_ENC_PIC_PARAMS>,
             ) -> NvEncoderResult<()> {
                 self.encoder.encode_frame(packet, pic_params)
@@ -119,7 +119,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             /// the application must call EndEncode() to get all the queued encoded frames
             /// from the encoder. The application must call this function before destroying
             /// an encoder session.
-            fn end_encode(&mut self, packet: &mut Vec<Vec<u8>>) -> NvEncoderResult<()> {
+            fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()> {
                 self.encoder.end_encode(packet)
             }
 
