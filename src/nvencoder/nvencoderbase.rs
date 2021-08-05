@@ -9,7 +9,7 @@ use nv_video_codec_sys::{
     NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
     NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
     NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
-    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PIC_TYPE, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
+    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
     _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
@@ -901,7 +901,6 @@ where
     ) -> NvEncoderResult<()> {
         let end =
             if self.output_delay != 0 { self.to_send - self.output_delay } else { self.to_send };
-        dbg!(self.output_delay, self.to_send, self.got, end, self.got < end);
         while self.got < end {
             let packet_index = (self.got % self.encoder_buffer) as usize;
             self.wait_for_completion_event(packet_index as i32);
