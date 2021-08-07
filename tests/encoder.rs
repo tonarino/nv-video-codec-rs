@@ -20,7 +20,7 @@ use nv_video_codec_rs::nvencoder::{
 };
 use nv_video_codec_sys::{
     guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
-    _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR,
+    _NV_ENC_PIC_FLAGS::{NV_ENC_PIC_FLAG_FORCEIDR, NV_ENC_PIC_FLAG_OUTPUT_SPSPPS},
 };
 use simple_logger::SimpleLogger;
 
@@ -186,7 +186,7 @@ fn encode_multi_frame_grayscale() -> Result<()> {
 
         let params = NV_ENC_PIC_PARAMS {
             // force intra-frame and force per-frame metadata
-            encodePicFlags: NV_ENC_PIC_FLAG_FORCEIDR,
+            encodePicFlags: NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS,
             ..Default::default()
         };
         encoder.encode_frame(&mut packet, Some(params))?;
