@@ -99,9 +99,14 @@ pub const NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID: GUID = GUID {
 // NV_ENC_DEPRECATED static const GUID NV_ENC_PRESET_LOW_LATENCY_HQ_GUID  =
 // { 0xc5f733b9, 0xea97, 0x4cf9, { 0xbe, 0xc2, 0xbf, 0x78, 0xa7, 0x4f, 0xd1, 0x5 } };
 
+// DEPRECATED
 // // {67082A44-4BAD-48FA-98EA-93056D150A58}
-// NV_ENC_DEPRECATED static const GUID NV_ENC_PRESET_LOW_LATENCY_HP_GUID =
-// { 0x67082a44, 0x4bad, 0x48fa, { 0x98, 0xea, 0x93, 0x5, 0x6d, 0x15, 0xa, 0x58 } };
+// pub const NV_ENC_PRESET_LOW_LATENCY_HP_GUID: GUID = GUID {
+//     Data1: 0x67082a44,
+//     Data2: 0x4bad,
+//     Data3: 0x48fa,
+//     Data4: [0x98, 0xea, 0x93, 0x5, 0x6d, 0x15, 0xa, 0x58],
+// };
 
 // // {D5BFB716-C604-44e7-9BB8-DEA5510FC3AC}
 // NV_ENC_DEPRECATED static const GUID NV_ENC_PRESET_LOSSLESS_DEFAULT_GUID =
@@ -115,8 +120,12 @@ pub const NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID: GUID = GUID {
 // // for HIGH_QUALITY and LOSSLESS tuning info, and will not work with Weighted Prediction enabled. In case Weighted Prediction is required, disable B frames by
 // // setting frameIntervalP = 1
 // // {FC0A8D3E-45F8-4CF8-80C7-298871590EBF}
-// static const GUID NV_ENC_PRESET_P1_GUID   =
-// { 0xfc0a8d3e, 0x45f8, 0x4cf8, { 0x80, 0xc7, 0x29, 0x88, 0x71, 0x59, 0xe, 0xbf } };
+pub const NV_ENC_PRESET_P1_GUID: GUID = GUID {
+    Data1: 0xfc0a8d3e,
+    Data2: 0x45f8,
+    Data3: 0x4cf8,
+    Data4: [0x80, 0xc7, 0x29, 0x88, 0x71, 0x59, 0xe, 0xbf],
+};
 
 // // {F581CFB8-88D6-4381-93F0-DF13F9C27DAB}
 // static const GUID NV_ENC_PRESET_P2_GUID   =
@@ -145,5 +154,9 @@ pub const NV_ENC_PRESET_P3_GUID: GUID = GUID {
 // { 0x8e75c279, 0x6299, 0x4ab6, { 0x83, 0x2, 0xb, 0x21, 0x5a, 0x33, 0x5c, 0xf5 } };
 
 // // {84848C12-6F71-4C13-931B-53E283F57974}
-// static const GUID NV_ENC_PRESET_P7_GUID   =
-// { 0x84848c12, 0x6f71, 0x4c13, { 0x93, 0x1b, 0x53, 0xe2, 0x83, 0xf5, 0x79, 0x74 } };
+pub const NV_ENC_PRESET_P7_GUID: GUID = GUID {
+    Data1: 0x84848c12,
+    Data2: 0x6f71,
+    Data3: 0x4c13,
+    Data4: [0x93, 0x1b, 0x53, 0xe2, 0x83, 0xf5, 0x79, 0x74],
+};

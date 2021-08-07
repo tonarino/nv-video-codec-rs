@@ -10,6 +10,7 @@ mod utils;
 use std::{
     io::Write,
     ops::{Deref, DerefMut},
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
@@ -17,7 +18,11 @@ use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, PossiblyCu
 use nv_video_codec_rs::nvencoder::{
     types::BufferFormat, NvEncoder, NvEncoderGL, NvEncoderGLBuilder,
 };
-use nv_video_codec_sys::{guids, NV_ENC_TUNING_INFO};
+use nv_video_codec_sys::{
+    guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
+    _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR,
+};
+use simple_logger::SimpleLogger;
 
 struct EncoderWithContext((NvEncoderGL, glutin::Context<PossiblyCurrent>));
 
@@ -60,11 +65,28 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<En
 }
 
 fn util_create_encoder(encoder: &mut EncoderWithContext) -> Result<()> {
-    let params = encoder.create_default_encoder_params(
+    let mut params = encoder.create_default_encoder_params(
         guids::NV_ENC_CODEC_HEVC_GUID,
+        // preset guid seems to have no real effect on the speed???
+        // needs testing as well
         guids::NV_ENC_PRESET_P3_GUID,
-        NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
+        // can't really see a difference between ULTRA_LOW_LATENCY and LOW_LATENCY???
+        // ULTRA_LOW might be like 0.5ms faster at times?
+        // needs testing on dev installation
+        NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
     )?;
+    params.frameRateNum = 60;
+    unsafe {
+        (*params.encodeConfig).rcParams.rateControlMode =
+            NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR;
+        // (*params.encodeConfig).rcParams.multiPass =
+        //     NV_ENC_MULTI_PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION;
+        (*params.encodeConfig).rcParams.lowDelayKeyFrameScale = 1;
+        (*params.encodeConfig).rcParams.averageBitRate = 13 * 1000 * 1000;
+        (*params.encodeConfig).rcParams.vbvBufferSize = encoder.get_frame_size()?;
+        (*params.encodeConfig).rcParams.vbvInitialDelay = encoder.get_frame_size()?;
+        (*params.encodeConfig).rcParams.set_enableAQ(1);
+    }
     encoder.create_encoder(&params)?;
     Ok(())
 }
@@ -126,17 +148,23 @@ fn encode_single_frame_grayscale() -> Result<()> {
 
 #[test]
 fn encode_multi_frame_grayscale() -> Result<()> {
-    let (width, height) = (1280, 720);
+    let _ = SimpleLogger::new().init();
+    let (width, height) = (3088, 2076);
     let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
     util_create_encoder(&mut encoder)?;
 
-    let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
+    let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
-    let mut f = std::fs::File::create("encode_out_grayscale_10frames.hevc")?;
+    let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
-    for _ in 0..10 {
+    const NUM_TORTURE_FRAMES: usize = 5000;
+    let mut total_time = Duration::from_millis(0);
+    let mut blocked_time = Duration::from_millis(0);
+    let mut frames_encoded = 0;
+    for _ in 0..NUM_TORTURE_FRAMES {
+        let start_time = Instant::now();
         let encoder_input_frame = encoder.get_next_input_frame();
         let resource = encoder_input_frame.input_ptr_as_gltex();
         // TODO: remove these hacks
@@ -155,10 +183,41 @@ fn encode_multi_frame_grayscale() -> Result<()> {
             );
             gl::BindTexture((*resource).target, 0);
         }
-        encoder.encode_frame(&mut packet, None)?;
-        for frame in &packet {
-            f.write_all(&frame)?;
+
+        let params = NV_ENC_PIC_PARAMS {
+            // force intra-frame and force per-frame metadata
+            encodePicFlags: NV_ENC_PIC_FLAG_FORCEIDR,
+            ..Default::default()
+        };
+        encoder.encode_frame(&mut packet, Some(params))?;
+
+        frames_encoded += 1;
+        total_time += start_time.elapsed();
+        blocked_time += start_time.elapsed();
+        if frames_encoded % 500 == 0 {
+            info_ctx!(
+                "encode_multi",
+                "Encoded last 500 frames in {:?}, {:?} per frame",
+                blocked_time,
+                blocked_time / 500
+            );
+            blocked_time = Duration::from_millis(0);
         }
+        while start_time.elapsed() < Duration::from_millis(1000) / 60 {
+            std::thread::sleep(Duration::from_micros(10));
+        }
+    }
+    info_ctx!(
+        "encode_multi",
+        "Encoded {} frames in {:?}, {:?} per frame",
+        NUM_TORTURE_FRAMES,
+        total_time,
+        total_time / NUM_TORTURE_FRAMES as u32
+    );
+
+    // ffmpeg will not decode this properly, but nvcodec will
+    for frame in &packet {
+        f.write_all(&frame)?;
     }
 
     encoder.end_encode(&mut packet)?;
