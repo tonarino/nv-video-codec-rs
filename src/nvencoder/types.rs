@@ -1,0 +1,92 @@
+use ffi::_NV_ENC_BUFFER_FORMAT;
+use nv_video_codec_sys as ffi;
+
+use super::{NvEncError, NvEncoderError};
+
+ffi_enum! {
+    #[derive(Debug, Clone, Copy)]
+    pub enum BufferFormat = _NV_ENC_BUFFER_FORMAT
+    cvt_err: BufferFormatConvertError
+    {
+        UNDEFINED = NV_ENC_BUFFER_FORMAT_UNDEFINED
+        NV12 = NV_ENC_BUFFER_FORMAT_NV12
+        YV12 = NV_ENC_BUFFER_FORMAT_YV12
+        IYUV = NV_ENC_BUFFER_FORMAT_IYUV
+        YUV444 = NV_ENC_BUFFER_FORMAT_YUV444
+        YUV420_10BIT = NV_ENC_BUFFER_FORMAT_YUV420_10BIT
+        YUV444_10BIT = NV_ENC_BUFFER_FORMAT_YUV444_10BIT
+        ARGB = NV_ENC_BUFFER_FORMAT_ARGB
+        ARGB10 = NV_ENC_BUFFER_FORMAT_ARGB10
+        AYUV = NV_ENC_BUFFER_FORMAT_AYUV
+        ABGR = NV_ENC_BUFFER_FORMAT_ABGR
+        ABGR10 = NV_ENC_BUFFER_FORMAT_ABGR10
+        U8 = NV_ENC_BUFFER_FORMAT_U8
+    }
+}
+
+impl BufferFormat {
+    pub fn get_width_in_bytes(&self, width: u32) -> Result<u32, NvEncoderError> {
+        match &self {
+            Self::NV12 | Self::YV12 | Self::IYUV | Self::YUV444 => Ok(width),
+            Self::YUV420_10BIT | Self::YUV444_10BIT => Ok(width * 2),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(width * 4),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+
+    pub fn get_num_chroma_planes(&self) -> Result<u32, NvEncoderError> {
+        match &self {
+            Self::NV12 | Self::YUV420_10BIT => Ok(1),
+            Self::YV12 | Self::IYUV | Self::YUV444 | Self::YUV444_10BIT => Ok(2),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+
+    pub fn get_chroma_pitch(&self, luma_pitch: u32) -> Result<u32, NvEncoderError> {
+        match &self {
+            Self::NV12 | Self::YUV420_10BIT | Self::YUV444 | Self::YUV444_10BIT => Ok(luma_pitch),
+            Self::YV12 | Self::IYUV => Ok((luma_pitch + 1) / 2),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+
+    pub fn get_chroma_subplane_offsets(
+        &self,
+        pitch: u32,
+        height: u32,
+    ) -> Result<Vec<u32>, NvEncoderError> {
+        match &self {
+            Self::NV12 | Self::YUV420_10BIT => Ok(vec![pitch * height]),
+            Self::YV12 | Self::IYUV => Ok(vec![
+                pitch * height,
+                pitch * height + self.get_chroma_pitch(pitch)? * self.get_chroma_height(height)?,
+            ]),
+            Self::YUV444 | Self::YUV444_10BIT => Ok(vec![pitch * height, 2 * pitch * height]),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(vec![]),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+
+    pub fn get_chroma_height(&self, luma_height: u32) -> Result<u32, NvEncoderError> {
+        match &self {
+            Self::YV12 | Self::IYUV | Self::NV12 | Self::YUV420_10BIT => Ok((luma_height + 1) / 1),
+            Self::YUV444 | Self::YUV444_10BIT => Ok(luma_height),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+
+    pub fn get_chroma_width_in_bytes(&self, luma_width: u32) -> Result<u32, NvEncoderError> {
+        match &self {
+            Self::YV12 | Self::IYUV => Ok((luma_width + 1) / 2),
+            Self::NV12 => Ok(luma_width),
+            Self::YUV420_10BIT => Ok(2 * luma_width),
+            Self::YUV444 => Ok(luma_width),
+            Self::YUV444_10BIT => Ok(2 * luma_width),
+            Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
+            _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+}
