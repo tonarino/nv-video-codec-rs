@@ -86,6 +86,8 @@ fn util_create_encoder(encoder: &mut EncoderWithContext) -> Result<()> {
         (*params.encodeConfig).rcParams.vbvBufferSize = encoder.get_frame_size()?;
         (*params.encodeConfig).rcParams.vbvInitialDelay = encoder.get_frame_size()?;
         (*params.encodeConfig).rcParams.set_enableAQ(1);
+        // required for use with ffmpeg, not with nvcodec
+        (*params.encodeConfig).encodeCodecConfig.hevcConfig.set_repeatSPSPPS(1);
     }
     encoder.create_encoder(&params)?;
     Ok(())
@@ -147,7 +149,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
 }
 
 #[test]
-fn encode_multi_frame_grayscale() -> Result<()> {
+fn encode_multi_frame_3k() -> Result<()> {
     let _ = SimpleLogger::new().init();
     let (width, height) = (3088, 2076);
     let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
@@ -215,7 +217,6 @@ fn encode_multi_frame_grayscale() -> Result<()> {
         total_time / NUM_TORTURE_FRAMES as u32
     );
 
-    // ffmpeg will not decode this properly, but nvcodec will
     for frame in &packet {
         f.write_all(&frame)?;
     }
