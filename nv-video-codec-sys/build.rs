@@ -70,12 +70,18 @@ fn main() {
         .constified_enum_module("cudaVideoCreateFlags_enum")
         .constified_enum_module("cuvidDecodeStatus_enum")
         .constified_enum_module("CUmemorytype_enum")
+        .constified_enum_module("_NV_ENC_BUFFER_FORMAT")
+        .constified_enum_module("_NV_ENC_PIC_FLAGS")
+        .constified_enum_module("_NV_ENC_PIC_STRUCT")
+        .blocklist_item("NV_ENC_.*_GUID")
         .rustified_enum(".*")
         .derive_default(true)
         .allowlist_var("(?i)(.*cu.*|.*nv.*)")
         .allowlist_type("(?i)(.*cu.*|.*nv.*)")
         .allowlist_function("(?i)(.*cu.*|.*nv.*)")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .derive_partialeq(true)
+        .derive_debug(true)
         .generate()
         .expect("Unable to generate bindings");
 

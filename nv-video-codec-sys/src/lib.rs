@@ -7,3 +7,5 @@
 #![allow(rustdoc::broken_intra_doc_links)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+pub mod guids;
