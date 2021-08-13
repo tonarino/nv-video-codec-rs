@@ -9,12 +9,11 @@ mod utils;
 
 use std::{
     io::Write,
-    ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
 
 use anyhow::Result;
-use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, PossiblyCurrent};
+use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix};
 use nv_video_codec_rs::nvencoder::{
     types::BufferFormat, NvEncoder, NvEncoderGL, NvEncoderGLBuilder,
 };
@@ -24,31 +23,7 @@ use nv_video_codec_sys::{
 };
 use simple_logger::SimpleLogger;
 
-struct EncoderWithContext((NvEncoderGL, glutin::Context<PossiblyCurrent>));
-
-impl Drop for EncoderWithContext {
-    fn drop(&mut self) {
-        // Make sure the encoder is dropped before the context.
-        drop(&mut self.0 .0);
-        drop(&mut self.0 .1);
-    }
-}
-
-impl Deref for EncoderWithContext {
-    type Target = NvEncoderGL;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0 .0
-    }
-}
-
-impl DerefMut for EncoderWithContext {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0 .0
-    }
-}
-
-fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<EncoderWithContext> {
+fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<NvEncoderGL> {
     let event_loop: EventLoop<()> = EventLoop::new_any_thread();
     let context_builder = glutin::ContextBuilder::new();
     let size = glutin::dpi::PhysicalSize { width, height };
@@ -58,13 +33,13 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<En
     };
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let encoder = NvEncoderGLBuilder::new(width, height, format)
+    let encoder = NvEncoderGLBuilder::new(context, width, height, format)
         .build()
         .expect("Could not create NvEncoderGl");
-    Ok(EncoderWithContext((encoder, context)))
+    Ok(encoder)
 }
 
-fn util_create_encoder(encoder: &mut EncoderWithContext) -> Result<()> {
+fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
     let mut params = encoder.create_default_encoder_params(
         guids::NV_ENC_CODEC_HEVC_GUID,
         // preset guid seems to have no real effect on the speed???
