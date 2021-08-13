@@ -13,6 +13,8 @@ use rustacuda::{
     device::Device,
 };
 use simple_logger::SimpleLogger;
+
+#[cfg(feature = "torture")]
 use std::time::Duration;
 
 fn init_cuda_ctx() -> Result<Context> {
@@ -27,7 +29,8 @@ fn init_cuda_ctx() -> Result<Context> {
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
     let decoder =
-        NvDecoderBuilder::new(context, false, nv_video_codec_rs::common::Codec::HEVC).build()?;
+        NvDecoderBuilder::new(context, false, nv_video_codec_rs::nvdecoder::types::Codec::HEVC)
+            .build()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -44,9 +47,12 @@ fn run_basic_decode(
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder =
-        NvDecoderBuilder::new(context, use_device_frame, nv_video_codec_rs::common::Codec::HEVC)
-            .build()?;
+    let mut decoder = NvDecoderBuilder::new(
+        context,
+        use_device_frame,
+        nv_video_codec_rs::nvdecoder::types::Codec::HEVC,
+    )
+    .build()?;
 
     let start = std::time::Instant::now();
     let mut frames_decoded = 0;
@@ -108,7 +114,9 @@ fn decode_h265_3k_device() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "torture")]
 const NUM_TORTURE_FRAMES: usize = 10000;
+#[cfg(feature = "torture")]
 fn run_torture_test(
     test_name: &str,
     data: &[u8],
@@ -120,9 +128,12 @@ fn run_torture_test(
 ) -> Result<()> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder =
-        NvDecoderBuilder::new(context, use_device_frame, nv_video_codec_rs::common::Codec::HEVC)
-            .build()?;
+    let mut decoder = NvDecoderBuilder::new(
+        context,
+        use_device_frame,
+        nv_video_codec_rs::nvdecoder::types::Codec::HEVC,
+    )
+    .build()?;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);

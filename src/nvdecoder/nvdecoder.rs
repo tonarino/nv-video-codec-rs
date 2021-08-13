@@ -1,9 +1,8 @@
-use crate::{
-    common::{
-        ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, IntoCudaResult, Rect, SurfaceFormat,
-    },
-    nvdecoder::FrameData,
+use super::{
+    types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
+    FrameData,
 };
+use crate::common::cuda_result::IntoCudaResult;
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,

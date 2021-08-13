@@ -1,8 +1,9 @@
 use rustacuda::context::Context;
 
-use crate::common::{Codec, Dim, Rect};
-
-use super::{NvDecoder, NvDecoderError};
+use super::{
+    types::{Codec, Dim, Rect},
+    NvDecoder, NvDecoderError,
+};
 
 pub struct NvDecoderBuilder {
     context: Context,
