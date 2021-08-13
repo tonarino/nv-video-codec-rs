@@ -1,3 +1,5 @@
+use glutin::{Context, PossiblyCurrent};
+
 use super::{BufferFormat, NvEncoderError, NvEncoderGL};
 // use rustacuda::context::Context;
 
@@ -17,6 +19,7 @@ use super::{BufferFormat, NvEncoderError, NvEncoderGL};
 // }
 
 pub struct NvEncoderGLBuilder {
+    context: Context<PossiblyCurrent>,
     width: u32,
     height: u32,
     buffer_format: BufferFormat,
@@ -29,17 +32,30 @@ impl NvEncoderGLBuilder {
 
     builder_field_setter!(motion_estimation_only: bool);
 
-    pub fn new(width: u32, height: u32, buffer_format: BufferFormat) -> Self {
+    pub fn new(
+        context: Context<PossiblyCurrent>,
+        width: u32,
+        height: u32,
+        buffer_format: BufferFormat,
+    ) -> Self {
         // Note: this was originally set to 3 in NvEncoderGL.h by default
         // Absolutely necessary for performance
         // Three shall be the number thou shalt count, and the number of counting shall be three.
         let extra_output_delay = 3;
 
-        Self { width, height, buffer_format, extra_output_delay, motion_estimation_only: false }
+        Self {
+            context,
+            width,
+            height,
+            buffer_format,
+            extra_output_delay,
+            motion_estimation_only: false,
+        }
     }
 
     pub fn build<'a>(self) -> Result<NvEncoderGL, NvEncoderError> {
         NvEncoderGL::new(
+            self.context,
             self.width,
             self.height,
             self.buffer_format,

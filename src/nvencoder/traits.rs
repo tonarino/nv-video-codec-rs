@@ -69,10 +69,6 @@ pub trait NvEncoder {
 #[macro_export]
 macro_rules! impl_nvencoder_wrapper_type {
     ($name:ident, $resourcemanager:ty) => {
-        pub struct $name {
-            encoder: NvEncoderBase<$resourcemanager>,
-        }
-
         impl NvEncoder for $name {
             /// This function is used to initialize the encoder session.
             /// Application must call this function to initialize the encoder, before
