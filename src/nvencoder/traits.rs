@@ -66,6 +66,18 @@ pub trait NvEncoder {
     fn get_encoder_buffer_count(&self) -> i32;
 }
 
+/// Extended NvEncoder trait providing higher level functions
+pub trait NvEncoderExt {
+    fn encode_frame_from_data(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        output_packet_buffer: &mut Vec<&[u8]>,
+    ) -> NvEncoderResult<()>;
+}
+
 #[macro_export]
 macro_rules! impl_nvencoder_wrapper_type {
     ($name:ident, $resourcemanager:ty) => {

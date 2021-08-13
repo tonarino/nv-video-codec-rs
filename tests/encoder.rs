@@ -15,7 +15,7 @@ use std::{
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix};
 use nv_video_codec_rs::nvencoder::{
-    types::BufferFormat, NvEncoder, NvEncoderGL, NvEncoderGLBuilder,
+    types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL, NvEncoderGLBuilder,
 };
 use nv_video_codec_sys::{
     guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
@@ -136,37 +136,18 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
-    const NUM_TORTURE_FRAMES: usize = 5000;
+    const NUM_TORTURE_FRAMES: usize = 500;
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
-        let encoder_input_frame = encoder.get_next_input_frame();
-        let resource = encoder_input_frame.input_ptr_as_gltex();
-        // TODO: remove these hacks
-        unsafe {
-            gl::BindTexture((*resource).target, (*resource).texture);
-            gl::TexSubImage2D(
-                (*resource).target,
-                0,                         // level
-                0,                         // x offset
-                0,                         // y offset
-                width as i32,              // width
-                (height * 3 / 2) as i32,   // height
-                gl::RED,                   // format (single-channel)
-                gl::UNSIGNED_BYTE,         // type
-                data.as_ptr() as *const _, // data
-            );
-            gl::BindTexture((*resource).target, 0);
-        }
-
         let params = NV_ENC_PIC_PARAMS {
             // force intra-frame and force per-frame metadata
             encodePicFlags: NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS,
             ..Default::default()
         };
-        encoder.encode_frame(&mut packet, Some(params))?;
+        encoder.encode_frame_from_data(data, width, height, Some(params), &mut packet)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

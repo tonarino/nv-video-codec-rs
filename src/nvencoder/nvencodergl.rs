@@ -1,9 +1,11 @@
 use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoder, NvEncoderResult,
+    NvEncoder, NvEncoderExt, NvEncoderResult,
 };
 use glutin::{Context, PossiblyCurrent};
-use nv_video_codec_sys::{NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE};
+use nv_video_codec_sys::{
+    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS, _NV_ENC_DEVICE_TYPE,
+};
 
 pub struct NvEncoderGL {
     encoder: NvEncoderBase<NvEncoderGLResourceManager>,
@@ -11,6 +13,38 @@ pub struct NvEncoderGL {
 }
 
 impl_nvencoder_wrapper_type!(NvEncoderGL, NvEncoderGLResourceManager);
+
+impl NvEncoderExt for NvEncoderGL {
+    fn encode_frame_from_data(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        output_packet_buffer: &mut Vec<&[u8]>,
+    ) -> NvEncoderResult<()> {
+        let encoder_input_frame = self.get_next_input_frame();
+        let resource = encoder_input_frame.input_ptr_as_gltex();
+        // TODO: remove these hacks
+        unsafe {
+            gl::BindTexture((*resource).target, (*resource).texture);
+            gl::TexSubImage2D(
+                (*resource).target,
+                0,                         // level
+                0,                         // x offset
+                0,                         // y offset
+                width as i32,              // width
+                (height * 3 / 2) as i32,   // height
+                gl::RED,                   // format (single-channel)
+                gl::UNSIGNED_BYTE,         // type
+                data.as_ptr() as *const _, // data
+            );
+            gl::BindTexture((*resource).target, 0);
+        }
+
+        self.encode_frame(output_packet_buffer, pic_params)
+    }
+}
 
 impl NvEncoderGL {
     pub fn new(
