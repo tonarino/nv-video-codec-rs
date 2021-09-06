@@ -1,0 +1,26 @@
+[package]
+name = "nv-video-codec-rs"
+version = "0.1.0"
+authors = ["Edward Yang <edward.yang6771@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+torture = []
+
+[dependencies]
+bitflags = "1.2"
+gl = "0.14"
+nv-video-codec-sys = { path = "../nv-video-codec-sys" }
+parking_lot = "0.11"
+rustacuda = "0.1"
+rustacuda_core = "0.1"
+rustacuda_derive = "0.1"
+thiserror = "1.0"
+glutin = { version = "0.26", git = "https://github.com/tonarino/glutin", rev = "23b541478cd2975a3fe257af2455df1cf094ac26" }
+
+[dev-dependencies]
+anyhow = "1.0"
+simple_logger = "1.11"
+log = "0.4"
