@@ -1,2 +1,2 @@
 [workspace]
-members = ["nv-video-codec-rs", "nv-video-codec-sys"]
+members = ["nv-video-codec", "nv-video-codec-sys"]

@@ -1,5 +1,5 @@
 [package]
-name = "nv-video-codec-rs"
+name = "nv-video-codec"
 version = "0.1.0"
 authors = ["Edward Yang <edward.yang6771@gmail.com>"]
 edition = "2018"
