@@ -1,3 +1,5 @@
 **/target
 **/Cargo.lock
 .vscode/
+
+/nv-video-codec/encode_out_*

@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix};
-use nv_video_codec_rs::nvencoder::{
+use nv_video_codec::nvencoder::{
     types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL, NvEncoderGLBuilder,
 };
 use nv_video_codec_sys::{

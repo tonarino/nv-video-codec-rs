@@ -7,7 +7,7 @@ extern crate simple_logger;
 mod utils;
 
 use anyhow::Result;
-use nv_video_codec_rs::nvdecoder::{DecoderPacketFlags, NvDecoderBuilder};
+use nv_video_codec::nvdecoder::{DecoderPacketFlags, NvDecoderBuilder};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -29,7 +29,7 @@ fn init_cuda_ctx() -> Result<Context> {
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
     let decoder =
-        NvDecoderBuilder::new(context, false, nv_video_codec_rs::nvdecoder::types::Codec::HEVC)
+        NvDecoderBuilder::new(context, false, nv_video_codec::nvdecoder::types::Codec::HEVC)
             .build()?;
     std::mem::drop(decoder);
     Ok(())
@@ -50,7 +50,7 @@ fn run_basic_decode(
     let mut decoder = NvDecoderBuilder::new(
         context,
         use_device_frame,
-        nv_video_codec_rs::nvdecoder::types::Codec::HEVC,
+        nv_video_codec::nvdecoder::types::Codec::HEVC,
     )
     .build()?;
 
@@ -131,7 +131,7 @@ fn run_torture_test(
     let mut decoder = NvDecoderBuilder::new(
         context,
         use_device_frame,
-        nv_video_codec_rs::nvdecoder::types::Codec::HEVC,
+        nv_video_codec::nvdecoder::types::Codec::HEVC,
     )
     .build()?;
 
