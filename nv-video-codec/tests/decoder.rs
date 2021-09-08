@@ -29,7 +29,7 @@ fn init_cuda_ctx() -> Result<Context> {
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
     let decoder =
-        NvDecoder::build(context, false, nv_video_codec::nvdecoder::types::Codec::HEVC).build()?;
+        NvDecoder::build(context, nv_video_codec::nvdecoder::types::Codec::HEVC).build()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -46,9 +46,9 @@ fn run_basic_decode(
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder =
-        NvDecoder::build(context, use_device_frame, nv_video_codec::nvdecoder::types::Codec::HEVC)
-            .build()?;
+    let mut decoder = NvDecoder::build(context, nv_video_codec::nvdecoder::types::Codec::HEVC)
+        .use_device_frame(use_device_frame)
+        .build()?;
 
     let start = std::time::Instant::now();
     let mut frames_decoded = 0;
@@ -124,9 +124,9 @@ fn run_torture_test(
 ) -> Result<()> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder =
-        NvDecoder::build(context, use_device_frame, nv_video_codec::nvdecoder::types::Codec::HEVC)
-            .build()?;
+    let mut decoder = NvDecoder::build(context, nv_video_codec::nvdecoder::types::Codec::HEVC)
+        .use_device_frame(use_device_frame)
+        .build()?;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);

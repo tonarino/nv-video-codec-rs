@@ -120,8 +120,8 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
-    fn build(context: Context, use_device_frame: bool, codec: Codec) -> NvDecoderBuilder {
-        NvDecoderBuilder::new(context, use_device_frame, codec)
+    fn build(context: Context, codec: Codec) -> NvDecoderBuilder {
+        NvDecoderBuilder::new(context, codec)
     }
 
     // TODO(efyang) : switch these over to result types and just handle the results
