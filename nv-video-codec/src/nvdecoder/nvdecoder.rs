@@ -120,6 +120,10 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
+    fn build(context: Context, use_device_frame: bool, codec: Codec) -> NvDecoderBuilder {
+        NvDecoderBuilder::new(context, use_device_frame, codec)
+    }
+
     // TODO(efyang) : switch these over to result types and just handle the results
     // also potentially have special struct for each return type for these callbacks and translate them
     /* Return value from HandleVideoSequence() are interpreted as   :

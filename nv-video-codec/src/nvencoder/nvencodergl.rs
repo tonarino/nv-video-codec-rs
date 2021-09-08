@@ -47,6 +47,15 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
+    pub fn build(
+        context: Context<PossiblyCurrent>,
+        width: u32,
+        height: u32,
+        buffer_format: BufferFormat,
+    ) -> NvEncoderGLBuilder {
+        NvEncoderGLBuilder::new(context, width, height, buffer_format)
+    }
+
     pub fn new(
         context: Context<PossiblyCurrent>,
         width: u32,
