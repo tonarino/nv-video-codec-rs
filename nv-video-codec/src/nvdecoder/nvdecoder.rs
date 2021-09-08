@@ -2,7 +2,7 @@ use super::{
     types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
     FrameData,
 };
-use crate::common::cuda_result::IntoCudaResult;
+use crate::{common::cuda_result::IntoCudaResult, nvdecoder::NvDecoderBuilder};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
@@ -120,7 +120,7 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
-    fn build(context: Context, codec: Codec) -> NvDecoderBuilder {
+    pub fn build(context: Context, codec: Codec) -> NvDecoderBuilder {
         NvDecoderBuilder::new(context, codec)
     }
 

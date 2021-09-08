@@ -1,6 +1,6 @@
 use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoder, NvEncoderExt, NvEncoderResult,
+    NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use glutin::{Context, PossiblyCurrent};
 use nv_video_codec_sys::{
