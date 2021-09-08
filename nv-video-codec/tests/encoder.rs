@@ -71,7 +71,12 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
 
 #[test]
 fn init_encoder() -> Result<()> {
-    let (_encoder, _context) = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    let (encoder, context) = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+
+    // The encoder needs to be dropped before the GL context.
+    drop(encoder);
+    drop(context);
+
     Ok(())
 }
 
@@ -79,6 +84,10 @@ fn init_encoder() -> Result<()> {
 fn create_encoder() -> Result<()> {
     let (mut encoder, context) = util_init_encoder(1280, 720, BufferFormat::NV12)?;
     util_create_encoder(&mut encoder)?;
+
+    // The encoder needs to be dropped before the GL context.
+    drop(encoder);
+    drop(context);
 
     Ok(())
 }
@@ -120,6 +129,10 @@ fn encode_single_frame_grayscale() -> Result<()> {
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
+
+    // The encoder needs to be dropped before the GL context.
+    drop(encoder);
+    drop(context);
 
     Ok(())
 }
@@ -180,6 +193,10 @@ fn encode_multi_frame_3k() -> Result<()> {
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
+
+    // The encoder needs to be dropped before the GL context.
+    drop(encoder);
+    drop(context);
 
     Ok(())
 }
