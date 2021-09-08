@@ -120,7 +120,7 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
-    pub fn build(context: Context, codec: Codec) -> NvDecoderBuilder {
+    pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
         NvDecoderBuilder::new(context, codec)
     }
 

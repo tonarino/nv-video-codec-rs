@@ -47,7 +47,7 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
-    pub fn build(
+    pub fn builder(
         context: Context<PossiblyCurrent>,
         width: u32,
         height: u32,

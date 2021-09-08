@@ -31,7 +31,7 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Nv
     };
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let encoder = NvEncoderGL::build(context, width, height, format)
+    let encoder = NvEncoderGL::builder(context, width, height, format)
         .build()
         .expect("Could not create NvEncoderGl");
     Ok(encoder)
