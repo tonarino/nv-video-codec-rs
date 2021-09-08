@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::Result;
-use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context};
+use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::nvencoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
     guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
@@ -25,7 +25,7 @@ fn util_init_encoder(
     width: u32,
     height: u32,
     format: BufferFormat,
-) -> Result<(NvEncoderGL, Context)> {
+) -> Result<(NvEncoderGL, Context<PossiblyCurrent>)> {
     let event_loop: EventLoop<()> = EventLoop::new_any_thread();
     let context_builder = glutin::ContextBuilder::new();
     let size = glutin::dpi::PhysicalSize { width, height };
