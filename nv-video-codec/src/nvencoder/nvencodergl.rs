@@ -2,14 +2,12 @@ use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
-use glutin::{Context, PossiblyCurrent};
 use nv_video_codec_sys::{
     NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS, _NV_ENC_DEVICE_TYPE,
 };
 
 pub struct NvEncoderGL {
     encoder: NvEncoderBase<NvEncoderGLResourceManager>,
-    context: Context<PossiblyCurrent>,
 }
 
 impl_nvencoder_wrapper_type!(NvEncoderGL, NvEncoderGLResourceManager);
@@ -47,17 +45,11 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
-    pub fn builder(
-        context: Context<PossiblyCurrent>,
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-    ) -> NvEncoderGLBuilder {
-        NvEncoderGLBuilder::new(context, width, height, buffer_format)
+    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderGLBuilder {
+        NvEncoderGLBuilder::new(width, height, buffer_format)
     }
 
     pub fn new(
-        context: Context<PossiblyCurrent>,
         width: u32,
         height: u32,
         buffer_format: BufferFormat,
@@ -76,16 +68,7 @@ impl NvEncoderGL {
                 motion_extimation_only,
                 false,
             )?,
-            context,
         })
-    }
-}
-
-impl Drop for NvEncoderGL {
-    fn drop(&mut self) {
-        // Make sure the encoder is dropped before the context.
-        drop(&mut self.encoder);
-        drop(&mut self.context);
     }
 }
 

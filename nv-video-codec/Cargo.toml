@@ -18,9 +18,9 @@ rustacuda = "0.1"
 rustacuda_core = "0.1"
 rustacuda_derive = "0.1"
 thiserror = "1.0"
-glutin = { version = "0.26", git = "https://github.com/tonarino/glutin", rev = "23b541478cd2975a3fe257af2455df1cf094ac26" }
 
 [dev-dependencies]
 anyhow = "1.0"
+glutin = { version = "0.26", git = "https://github.com/tonarino/glutin", rev = "23b541478cd2975a3fe257af2455df1cf094ac26" }
 simple_logger = "1.11"
 log = "0.4"
