@@ -19,6 +19,8 @@ pub struct NvDecoderBuilder {
 }
 
 impl NvDecoderBuilder {
+    builder_field_setter!(use_device_frame: bool);
+
     builder_field_setter!(low_latency: bool);
 
     builder_field_setter!(device_frame_pitched: bool);
@@ -33,10 +35,10 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(clock_rate: u32);
 
-    pub fn new(context: Context, use_device_frame: bool, codec: Codec) -> Self {
+    pub fn new(context: Context, codec: Codec) -> Self {
         Self {
             context,
-            use_device_frame,
+            use_device_frame: false,
             codec,
             low_latency: false,
             device_frame_pitched: false,
