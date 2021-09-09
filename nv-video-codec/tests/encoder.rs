@@ -9,6 +9,7 @@ mod utils;
 
 use std::{
     io::Write,
+    mem::ManuallyDrop,
     time::{Duration, Instant},
 };
 
@@ -21,11 +22,22 @@ use nv_video_codec_sys::{
 };
 use simple_logger::SimpleLogger;
 
-fn util_init_encoder(
-    width: u32,
-    height: u32,
-    format: BufferFormat,
-) -> Result<(NvEncoderGL, Context<PossiblyCurrent>)> {
+struct GlEncoderContext {
+    encoder: ManuallyDrop<NvEncoderGL>,
+    context: ManuallyDrop<Context<PossiblyCurrent>>,
+}
+
+impl Drop for GlEncoderContext {
+    fn drop(&mut self) {
+        unsafe {
+            // The GL context needs to be dropped after the encoder.
+            ManuallyDrop::drop(&mut self.encoder);
+            ManuallyDrop::drop(&mut self.context);
+        }
+    }
+}
+
+fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<GlEncoderContext> {
     let event_loop: EventLoop<()> = EventLoop::new_any_thread();
     let context_builder = glutin::ContextBuilder::new();
     let size = glutin::dpi::PhysicalSize { width, height };
@@ -37,7 +49,11 @@ fn util_init_encoder(
 
     let encoder =
         NvEncoderGL::builder(width, height, format).build().expect("Could not create NvEncoderGl");
-    Ok((encoder, context))
+
+    Ok(GlEncoderContext {
+        encoder: ManuallyDrop::new(encoder),
+        context: ManuallyDrop::new(context),
+    })
 }
 
 fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
@@ -71,23 +87,15 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
 
 #[test]
 fn init_encoder() -> Result<()> {
-    let (encoder, context) = util_init_encoder(1280, 720, BufferFormat::NV12)?;
-
-    // The encoder needs to be dropped before the GL context.
-    drop(encoder);
-    drop(context);
+    let _encoder_context = util_init_encoder(1280, 720, BufferFormat::NV12)?;
 
     Ok(())
 }
 
 #[test]
 fn create_encoder() -> Result<()> {
-    let (mut encoder, context) = util_init_encoder(1280, 720, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
-
-    // The encoder needs to be dropped before the GL context.
-    drop(encoder);
-    drop(context);
+    let mut encoder_context = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    util_create_encoder(&mut encoder_context.encoder)?;
 
     Ok(())
 }
@@ -95,8 +103,9 @@ fn create_encoder() -> Result<()> {
 #[test]
 fn encode_single_frame_grayscale() -> Result<()> {
     let (width, height) = (1280, 720);
-    let (mut encoder, context) = util_init_encoder(width, height, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
+    let mut encoder_context = util_init_encoder(width, height, BufferFormat::NV12)?;
+    let encoder = &mut encoder_context.encoder;
+    util_create_encoder(encoder)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
@@ -130,10 +139,6 @@ fn encode_single_frame_grayscale() -> Result<()> {
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
 
-    // The encoder needs to be dropped before the GL context.
-    drop(encoder);
-    drop(context);
-
     Ok(())
 }
 
@@ -141,8 +146,9 @@ fn encode_single_frame_grayscale() -> Result<()> {
 fn encode_multi_frame_3k() -> Result<()> {
     let _ = SimpleLogger::new().init();
     let (width, height) = (3088, 2076);
-    let (mut encoder, context) = util_init_encoder(width, height, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
+    let mut encoder_context = util_init_encoder(width, height, BufferFormat::NV12)?;
+    let encoder = &mut encoder_context.encoder;
+    util_create_encoder(encoder)?;
 
     let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
@@ -193,10 +199,6 @@ fn encode_multi_frame_3k() -> Result<()> {
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
-
-    // The encoder needs to be dropped before the GL context.
-    drop(encoder);
-    drop(context);
 
     Ok(())
 }
