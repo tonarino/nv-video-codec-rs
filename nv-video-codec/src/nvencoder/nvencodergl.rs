@@ -1,6 +1,6 @@
 use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoder, NvEncoderExt, NvEncoderResult,
+    NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use glutin::{Context, PossiblyCurrent};
 use nv_video_codec_sys::{
@@ -47,6 +47,15 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
+    pub fn builder(
+        context: Context<PossiblyCurrent>,
+        width: u32,
+        height: u32,
+        buffer_format: BufferFormat,
+    ) -> NvEncoderGLBuilder {
+        NvEncoderGLBuilder::new(context, width, height, buffer_format)
+    }
+
     pub fn new(
         context: Context<PossiblyCurrent>,
         width: u32,

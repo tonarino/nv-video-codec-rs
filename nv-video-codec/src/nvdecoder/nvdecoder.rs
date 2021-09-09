@@ -2,7 +2,7 @@ use super::{
     types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
     FrameData,
 };
-use crate::common::cuda_result::IntoCudaResult;
+use crate::{common::cuda_result::IntoCudaResult, nvdecoder::NvDecoderBuilder};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
@@ -120,6 +120,10 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
+    pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
+        NvDecoderBuilder::new(context, codec)
+    }
+
     // TODO(efyang) : switch these over to result types and just handle the results
     // also potentially have special struct for each return type for these callbacks and translate them
     /* Return value from HandleVideoSequence() are interpreted as   :
