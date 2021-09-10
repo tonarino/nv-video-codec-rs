@@ -67,6 +67,9 @@ pub struct NvDecoder<'a> {
     /// height of the mapped surface
     surface_height: u64,
     surface_width: u64,
+
+    // Metadata about decoded frames
+    last_frame_is_iframe: bool,
 }
 
 /// decoder refers to an NvDecoder
@@ -322,6 +325,9 @@ impl<'a> NvDecoder<'a> {
         // NOTE: this function takes basically no time (~100us), no real point of optimizing this
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!pic_params.is_null());
+
+        self.last_frame_is_iframe = unsafe { (*pic_params).intra_pic_flag != 0 };
+
         unsafe {
             self.picture_decode_index_mapping[(*pic_params).CurrPicIdx as usize] =
                 self.decoded_pictures;
@@ -611,6 +617,7 @@ impl<'a> NvDecoder<'a> {
             display_rect: Default::default(),
             surface_height: 0,
             surface_width: 0,
+            last_frame_is_iframe: false,
         });
 
         // TODO: handle errors

@@ -1,4 +1,5 @@
 pub mod builder;
+pub mod decoder;
 pub mod error;
 pub mod flags;
 pub mod frame;
