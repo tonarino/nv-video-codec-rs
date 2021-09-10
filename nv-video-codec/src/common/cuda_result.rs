@@ -242,7 +242,7 @@ impl IntoCudaResult<()> for cudaError_enum {
             },
             cudaError_enum::CUDA_ERROR_UNKNOWN => Err(CudaError::Unknown),
             // TODO: better way to do nonexhaustive without #[allow]
-            unknown_cuda_err => Err(CudaError::Unrecognized(unknown_cuda_err as u32)),
+            unknown_cuda_err => Err(CudaError::Unrecognized(unknown_cuda_err.0 as u32)),
         }
     }
 }
