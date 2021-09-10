@@ -845,7 +845,7 @@ where
     fn send_eos(&mut self) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS,
+            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0 as u32,
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
