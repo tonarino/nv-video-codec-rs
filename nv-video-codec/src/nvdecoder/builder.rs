@@ -1,4 +1,4 @@
-use rustacuda::context::Context;
+use rustacuda::context::UnownedContext;
 
 use super::{
     types::{Codec, Dim, Rect},
@@ -6,7 +6,7 @@ use super::{
 };
 
 pub struct NvDecoderBuilder {
-    context: Context,
+    context: UnownedContext,
     use_device_frame: bool,
     codec: Codec,
     low_latency: bool,
@@ -35,7 +35,7 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(clock_rate: u32);
 
-    pub fn new(context: Context, codec: Codec) -> Self {
+    pub fn new(context: UnownedContext, codec: Codec) -> Self {
         Self {
             context,
             use_device_frame: false,

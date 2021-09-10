@@ -16,7 +16,7 @@ use ffi::{
 };
 use nv_video_codec_sys as ffi;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use rustacuda::context::{Context, ContextHandle, ContextStack};
+use rustacuda::context::{ContextHandle, ContextStack, UnownedContext};
 use std::{
     collections::VecDeque,
     convert::TryInto,
@@ -30,7 +30,7 @@ use super::{DecoderPacketFlags, Frame, NvDecoderError};
 pub struct NvDecoder<'a> {
     parser: CUvideoparser,
     decoder: CUvideodecoder,
-    context: Context,
+    context: UnownedContext,
     use_device_frame: bool,
     codec: Codec,
     chroma_format: ChromaFormat,
@@ -109,7 +109,7 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_within_context<'a, F, T>(context: &'a Context, mut func: F)
+fn do_within_context<'a, F, T>(context: &'a UnownedContext, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
@@ -120,7 +120,7 @@ where
 }
 
 impl<'a> NvDecoder<'a> {
-    pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
+    pub fn builder(context: UnownedContext, codec: Codec) -> NvDecoderBuilder {
         NvDecoderBuilder::new(context, codec)
     }
 
@@ -556,7 +556,7 @@ impl<'a> NvDecoder<'a> {
 
 impl<'a> NvDecoder<'a> {
     pub fn new(
-        context: Context,
+        context: UnownedContext,
         use_device_frame: bool,
         codec: Codec,
         low_latency: bool,
