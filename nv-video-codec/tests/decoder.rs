@@ -66,11 +66,11 @@ fn run_basic_decode(
     assert!(decoder.get_width() == expected_width);
     assert!(decoder.get_height() == expected_height);
     info_ctx!(test_name, "frames decoded: {}, in {:?}", frames_decoded, start.elapsed(),);
-    assert!(decoder.get_video_info().len() > 0);
+    assert!(!decoder.get_video_info().is_empty());
     assert!(frames_decoded > 0);
     let frame = decoder.get_frame().unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
-    assert!(frame.data.as_ref().len() > 0);
+    assert!(!frame.data.as_ref().is_empty());
 
     // NOTE: frames can be checked with https://rawpixels.net/
     // std::fs::write("decode_out_grayscale.nv12", &frame.data)?;

@@ -121,7 +121,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
 
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
-        f.write_all(&frame)?;
+        f.write_all(frame)?;
     }
 
     encoder.end_encode(&mut packet)?;
@@ -183,7 +183,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     );
 
     for frame in &packet {
-        f.write_all(&frame)?;
+        f.write_all(frame)?;
     }
 
     encoder.end_encode(&mut packet)?;
