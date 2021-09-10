@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::Result;
-use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix};
+use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::nvencoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
     guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
@@ -21,7 +21,15 @@ use nv_video_codec_sys::{
 };
 use simple_logger::SimpleLogger;
 
-fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<NvEncoderGL> {
+struct GlEncoderContext {
+    encoder: NvEncoderGL,
+
+    // 'context' should be the last field in the struct to ensure
+    // it is dropped last.
+    _context: Context<PossiblyCurrent>,
+}
+
+fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<GlEncoderContext> {
     let event_loop: EventLoop<()> = EventLoop::new_any_thread();
     let context_builder = glutin::ContextBuilder::new();
     let size = glutin::dpi::PhysicalSize { width, height };
@@ -31,10 +39,10 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Nv
     };
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let encoder = NvEncoderGL::builder(context, width, height, format)
-        .build()
-        .expect("Could not create NvEncoderGl");
-    Ok(encoder)
+    let encoder =
+        NvEncoderGL::builder(width, height, format).build().expect("Could not create NvEncoderGl");
+
+    Ok(GlEncoderContext { encoder, _context: context })
 }
 
 fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
@@ -68,14 +76,15 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
 
 #[test]
 fn init_encoder() -> Result<()> {
-    let _ = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    let _encoder_context = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+
     Ok(())
 }
 
 #[test]
 fn create_encoder() -> Result<()> {
-    let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
+    let mut encoder_context = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    util_create_encoder(&mut encoder_context.encoder)?;
 
     Ok(())
 }
@@ -83,8 +92,9 @@ fn create_encoder() -> Result<()> {
 #[test]
 fn encode_single_frame_grayscale() -> Result<()> {
     let (width, height) = (1280, 720);
-    let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
+    let mut encoder_context = util_init_encoder(width, height, BufferFormat::NV12)?;
+    let encoder = &mut encoder_context.encoder;
+    util_create_encoder(encoder)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
@@ -125,8 +135,9 @@ fn encode_single_frame_grayscale() -> Result<()> {
 fn encode_multi_frame_3k() -> Result<()> {
     let _ = SimpleLogger::new().init();
     let (width, height) = (3088, 2076);
-    let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
-    util_create_encoder(&mut encoder)?;
+    let mut encoder_context = util_init_encoder(width, height, BufferFormat::NV12)?;
+    let encoder = &mut encoder_context.encoder;
+    util_create_encoder(encoder)?;
 
     let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
