@@ -9,7 +9,6 @@ mod utils;
 
 use std::{
     io::Write,
-    mem::ManuallyDrop,
     time::{Duration, Instant},
 };
 
@@ -23,18 +22,11 @@ use nv_video_codec_sys::{
 use simple_logger::SimpleLogger;
 
 struct GlEncoderContext {
-    encoder: ManuallyDrop<NvEncoderGL>,
-    context: ManuallyDrop<Context<PossiblyCurrent>>,
-}
+    encoder: NvEncoderGL,
 
-impl Drop for GlEncoderContext {
-    fn drop(&mut self) {
-        unsafe {
-            // The GL context needs to be dropped after the encoder.
-            ManuallyDrop::drop(&mut self.encoder);
-            ManuallyDrop::drop(&mut self.context);
-        }
-    }
+    // 'context' should be the last field in the struct to ensure
+    // it is dropped last.
+    _context: Context<PossiblyCurrent>,
 }
 
 fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<GlEncoderContext> {
@@ -50,10 +42,7 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Gl
     let encoder =
         NvEncoderGL::builder(width, height, format).build().expect("Could not create NvEncoderGl");
 
-    Ok(GlEncoderContext {
-        encoder: ManuallyDrop::new(encoder),
-        context: ManuallyDrop::new(context),
-    })
+    Ok(GlEncoderContext { encoder, _context: context })
 }
 
 fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
