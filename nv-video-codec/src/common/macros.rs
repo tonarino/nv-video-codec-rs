@@ -21,10 +21,10 @@ macro_rules! ffi_enum {
             $($field),*,
         }
 
-        impl Into<$ffi_name> for $name {
-            fn into(self) -> $ffi_name {
-                match self {
-                    $(Self::$field => $ffi_name::$ffi_field),*,
+        impl From<$name> for $ffi_name {
+            fn from(other: $name) -> Self {
+                match other {
+                    $($name::$field => $ffi_name::$ffi_field),*,
                 }
             }
         }
