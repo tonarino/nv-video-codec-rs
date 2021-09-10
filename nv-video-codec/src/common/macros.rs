@@ -21,8 +21,8 @@ macro_rules! ffi_enum {
             $($field),*,
         }
 
-        impl Into<$ffi_name::Type> for $name {
-            fn into(self) -> $ffi_name::Type {
+        impl Into<$ffi_name> for $name {
+            fn into(self) -> $ffi_name {
                 match self {
                     $(Self::$field => $ffi_name::$ffi_field),*,
                 }
@@ -34,12 +34,12 @@ macro_rules! ffi_enum {
             UnknownVariant(String),
         }
 
-        impl std::convert::TryFrom<$ffi_name::Type> for $name {
+        impl std::convert::TryFrom<$ffi_name> for $name {
             type Error = $cvt_err_name;
-            fn try_from(raw: $ffi_name::Type) -> Result<Self, Self::Error> {
+            fn try_from(raw: $ffi_name) -> Result<Self, Self::Error> {
                  match raw {
                     $($ffi_name::$ffi_field => Ok(Self::$field)),*,
-                    _ => Err($cvt_err_name::UnknownVariant(raw.to_string())),
+                    _ => Err($cvt_err_name::UnknownVariant(raw.0.to_string())),
                 }
             }
         }

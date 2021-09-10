@@ -8,6 +8,7 @@ use ffi::{
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
     cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
     cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
+    cudaVideoCreateFlags_enum,
     CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
@@ -232,8 +233,8 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.ulNumOutputSurfaces = 2;
         // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
         video_decode_create_info.ulCreationFlags = {
-            let cf: u32 = CreateFlags::PreferCUVID.into();
-            cf as u64
+            let cf: cudaVideoCreateFlags_enum = CreateFlags::PreferCUVID.into();
+            cf.0 as u64
         };
         video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
         video_decode_create_info.vidLock = self.ctx_lock;
