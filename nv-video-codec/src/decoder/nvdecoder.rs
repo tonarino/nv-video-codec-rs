@@ -256,8 +256,8 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.ulMaxWidth = self.max_width as u64;
         video_decode_create_info.ulMaxHeight = self.max_height as u64;
 
-        if !(self.crop_rect.right != 0 && self.crop_rect.bottom != 0)
-            && !(self.resize_dim.width != 0 && self.resize_dim.height != 0)
+        if (self.crop_rect.right == 0 || self.crop_rect.bottom == 0)
+            && (self.resize_dim.width == 0 || self.resize_dim.height == 0)
         {
             self.width = (video_format.display_area.right - video_format.display_area.left) as u32;
             self.luma_height =
