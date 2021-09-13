@@ -110,7 +110,7 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_within_context<'a, F, T>(context: &'a Context, mut func: F)
+fn do_within_context<F, T>(context: &Context, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
