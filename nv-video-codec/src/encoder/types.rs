@@ -71,7 +71,7 @@ impl BufferFormat {
 
     pub fn get_chroma_height(&self, luma_height: u32) -> Result<u32, NvEncoderError> {
         match &self {
-            Self::YV12 | Self::IYUV | Self::NV12 | Self::YUV420_10BIT => Ok((luma_height + 1) / 1),
+            Self::YV12 | Self::IYUV | Self::NV12 | Self::YUV420_10BIT => Ok(luma_height + 1),
             Self::YUV444 | Self::YUV444_10BIT => Ok(luma_height),
             Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
             _ => Err(NvEncError::InvalidParam.into()),

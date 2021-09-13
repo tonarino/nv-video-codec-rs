@@ -159,14 +159,14 @@ where
             }
         }
 
-        self.initialize_params = encoder_params.clone();
-        self.initialize_params.version = NV_ENC_INITIALIZE_PARAMS_VER;
+        self.initialize_params =
+            NV_ENC_INITIALIZE_PARAMS { version: NV_ENC_INITIALIZE_PARAMS_VER, ..*encoder_params };
 
         if !encoder_params.encodeConfig.is_null() {
-            unsafe {
-                self.encode_config = (*encoder_params.encodeConfig).clone();
-            }
-            self.encode_config.version = NV_ENC_CONFIG_VER;
+            self.encode_config = NV_ENC_CONFIG {
+                version: NV_ENC_CONFIG_VER,
+                ..unsafe { *encoder_params.encodeConfig }
+            };
         } else {
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
@@ -184,7 +184,7 @@ where
                     )
                     .into_nvenc_result()?;
                 }
-                self.encode_config = preset_config.presetCfg.clone();
+                self.encode_config = preset_config.presetCfg;
             } else {
                 self.encode_config.version = NV_ENC_CONFIG_VER;
                 self.encode_config.rcParams.rateControlMode =
@@ -414,7 +414,7 @@ where
         }
 
         unsafe {
-            *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+            *initialize_params.encodeConfig = preset_config.presetCfg;
             (*initialize_params.encodeConfig).frameIntervalP = 1;
             (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
             (*initialize_params.encodeConfig).rcParams.rateControlMode =
@@ -437,7 +437,7 @@ where
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
-                *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+                *initialize_params.encodeConfig = preset_config.presetCfg;
             }
         } else {
             self.encode_config.version = NV_ENC_CONFIG_VER;

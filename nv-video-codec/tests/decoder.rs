@@ -111,7 +111,7 @@ fn decode_h265_3k_device() -> Result<()> {
 }
 
 #[cfg(feature = "torture")]
-const NUM_TORTURE_FRAMES: usize = 10000;
+const NUM_TORTURE_FRAMES: i64 = 10000;
 #[cfg(feature = "torture")]
 fn run_torture_test(
     test_name: &str,
@@ -130,9 +130,8 @@ fn run_torture_test(
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
-    let mut timestamp = 0;
     let mut total_frames_decoded = 0;
-    for _ in 0..NUM_TORTURE_FRAMES {
+    for timestamp in 0..NUM_TORTURE_FRAMES {
         if let Some(frame_rate) = frame_rate {
             std::thread::sleep(Duration::from_secs_f64(1.0 / frame_rate));
         }
@@ -156,7 +155,6 @@ fn run_torture_test(
         total_time += start.elapsed();
         blocked_time += start.elapsed();
 
-        timestamp += 1;
         total_frames_decoded += frames_decoded;
         if total_frames_decoded % 1000 == 0 {
             info_ctx!(
@@ -178,7 +176,7 @@ fn run_torture_test(
     assert!(decoder.get_width() == expected_width);
     assert!(decoder.get_height() == expected_height);
     assert!(total_frames_decoded > 0);
-    assert!(decoder.get_video_info().len() > 0);
+    assert!(!decoder.get_video_info().is_empty());
 
     info_ctx!(
         test_name,

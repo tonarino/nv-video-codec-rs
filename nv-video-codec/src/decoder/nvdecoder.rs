@@ -335,7 +335,7 @@ impl<'a> NvDecoder<'a> {
             cuvidDecodePicture(self.decoder, pic_params)
         });
 
-        return 1;
+        1
     }
 
     /* Return value from HandlePictureDisplay() are interpreted as:
@@ -556,7 +556,7 @@ impl<'a> NvDecoder<'a> {
             }
         }
 
-        return -1;
+        -1
     }
 }
 
@@ -669,7 +669,7 @@ impl<'a> NvDecoder<'a> {
             timestamp,
         };
 
-        if data.len() == 0 {
+        if data.is_empty() {
             packet.flags |= CUVID_PKT_ENDOFSTREAM as c_ulong;
         }
 
@@ -691,7 +691,7 @@ impl<'a> NvDecoder<'a> {
             self.decoded_frames -= 1;
             self.decoded_frames_returned += 1;
             Some(MutexGuard::map(frames_locked, |frames| {
-                &mut frames[self.decoded_frames_returned - 1 as usize]
+                &mut frames[self.decoded_frames_returned - 1]
             }))
         } else {
             None
@@ -729,7 +729,7 @@ impl<'a> NvDecoder<'a> {
 
     pub fn get_height(&self) -> u32 {
         assert!(self.luma_height != 0);
-        return self.luma_height;
+        self.luma_height
     }
 
     pub fn get_frame_size(&self) -> u32 {
@@ -739,7 +739,7 @@ impl<'a> NvDecoder<'a> {
             * self.bpp as u32
     }
 
-    pub fn set_reconfig_params() -> Result<(), ()> {
+    pub fn set_reconfig_params() -> Result<(), NvDecoderError> {
         todo!()
     }
 
