@@ -5,11 +5,11 @@ use super::{
 use crate::{common::cuda_result::IntoCudaResult, decoder::NvDecoderBuilder};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
-    cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
-    cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
-    cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
-    cudaVideoCreateFlags_enum,
-    CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
+    cudaVideoCreateFlags_enum, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
+    cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
+    cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
+    cuvidUnmapVideoFrame64, size_t, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
+    CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
     CUVIDGETDECODESTATUS, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS,
@@ -148,10 +148,12 @@ impl<'a> NvDecoder<'a> {
         }
 
         self.video_info = format!("Video Input Information:\n{:#?}", video_format);
-        let mut decode_caps = CUVIDDECODECAPS::default();
-        decode_caps.eCodecType = video_format.codec;
-        decode_caps.eChromaFormat = video_format.chroma_format;
-        decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
+        let mut decode_caps = CUVIDDECODECAPS {
+            eCodecType: video_format.codec,
+            eChromaFormat: video_format.chroma_format,
+            nBitDepthMinus8: video_format.bit_depth_luma_minus8 as u32,
+            ..Default::default()
+        };
         do_within_context(&self.context, || unsafe {
             cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
         });
@@ -220,26 +222,26 @@ impl<'a> NvDecoder<'a> {
         // TODO(efyang) : create safe wrapper over VideoFormat
         self.video_format = video_format;
 
-        let mut video_decode_create_info = CUVIDDECODECREATEINFO::default();
-        video_decode_create_info.CodecType = video_format.codec;
-        video_decode_create_info.ChromaFormat = video_format.chroma_format;
-        video_decode_create_info.OutputFormat = self.output_format.into();
-        video_decode_create_info.bitDepthMinus8 = video_format.bit_depth_luma_minus8 as u64;
-        if video_format.progressive_sequence != 0 {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Weave.into();
-        } else {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Adaptive.into();
-        }
-        video_decode_create_info.ulNumOutputSurfaces = 2;
-        // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
-        video_decode_create_info.ulCreationFlags = {
-            let cf: cudaVideoCreateFlags_enum = CreateFlags::PreferCUVID.into();
-            cf.0 as u64
+        let mut video_decode_create_info = CUVIDDECODECREATEINFO {
+            CodecType: video_format.codec,
+            ChromaFormat: video_format.chroma_format,
+            OutputFormat: self.output_format.into(),
+            bitDepthMinus8: video_format.bit_depth_luma_minus8 as u64,
+            DeinterlaceMode: if video_format.progressive_sequence != 0 {
+                DeinterlaceMode::Weave.into()
+            } else {
+                DeinterlaceMode::Adaptive.into()
+            },
+            ulNumOutputSurfaces: 2,
+            // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
+            ulCreationFlags: cudaVideoCreateFlags_enum::from(CreateFlags::PreferCUVID).0 as u64,
+            ulNumDecodeSurfaces: decode_surface as u64,
+            vidLock: self.ctx_lock,
+            ulWidth: video_format.coded_width as u64,
+            ulHeight: video_format.coded_height as u64,
+            ..Default::default()
         };
-        video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
-        video_decode_create_info.vidLock = self.ctx_lock;
-        video_decode_create_info.ulWidth = video_format.coded_width as u64;
-        video_decode_create_info.ulHeight = video_format.coded_height as u64;
+
         // AV1 has max width/height of sequence in sequence header
         if matches!(video_format.codec.try_into().unwrap(), Codec::AV1)
             && video_format.seqhdr_data_length > 0
@@ -343,13 +345,14 @@ impl<'a> NvDecoder<'a> {
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
-        let mut video_processing_parameters = CUVIDPROCPARAMS::default();
-        video_processing_parameters.progressive_frame = disp_info.progressive_frame;
-        video_processing_parameters.second_field = disp_info.repeat_first_field + 1;
-        video_processing_parameters.top_field_first = disp_info.top_field_first;
-        video_processing_parameters.unpaired_field =
-            if disp_info.repeat_first_field < 0 { 1 } else { 0 };
-        video_processing_parameters.output_stream = self.stream;
+        let mut video_processing_parameters = CUVIDPROCPARAMS {
+            progressive_frame: disp_info.progressive_frame,
+            second_field: disp_info.repeat_first_field + 1,
+            top_field_first: disp_info.top_field_first,
+            unpaired_field: if disp_info.repeat_first_field < 0 { 1 } else { 0 },
+            output_stream: self.stream,
+            ..Default::default()
+        };
 
         let mut src_frame: CUdeviceptr = 0;
         let mut src_pitch = 0;
@@ -463,24 +466,26 @@ impl<'a> NvDecoder<'a> {
 
         // NOTE: memcpys take about 1ms total here
         // Copy luma plane
-        let mut m = CUDA_MEMCPY2D::default();
-        m.srcMemoryType = CUmemorytype_enum::CU_MEMORYTYPE_DEVICE;
-        m.srcDevice = src_frame;
-        m.srcPitch = src_pitch as u64;
-        m.dstMemoryType = if self.use_device_frame {
-            CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
-        } else {
-            CUmemorytype_enum::CU_MEMORYTYPE_HOST
+        let mut m = CUDA_MEMCPY2D {
+            srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
+            srcDevice: src_frame,
+            srcPitch: src_pitch as u64,
+            dstMemoryType: if self.use_device_frame {
+                CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
+            } else {
+                CUmemorytype_enum::CU_MEMORYTYPE_HOST
+            },
+            dstHost: decoded_frame_ptr as *mut c_void,
+            dstDevice: decoded_frame_ptr as CUdeviceptr,
+            dstPitch: if self.device_frame_pitch != 0 {
+                self.device_frame_pitch
+            } else {
+                (self.get_width() * self.bpp as u32) as u64
+            },
+            WidthInBytes: (self.get_width() * self.bpp as u32) as u64,
+            Height: self.luma_height as u64,
+            ..Default::default()
         };
-        m.dstHost = decoded_frame_ptr as *mut c_void;
-        m.dstDevice = decoded_frame_ptr as CUdeviceptr;
-        m.dstPitch = if self.device_frame_pitch != 0 {
-            self.device_frame_pitch
-        } else {
-            (self.get_width() * self.bpp as u32) as u64
-        };
-        m.WidthInBytes = (self.get_width() * self.bpp as u32) as u64;
-        m.Height = self.luma_height as u64;
         unsafe {
             cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
         }
