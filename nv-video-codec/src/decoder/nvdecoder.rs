@@ -2,7 +2,7 @@ use super::{
     types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
     FrameData,
 };
-use crate::{common::cuda_result::IntoCudaResult, nvdecoder::NvDecoderBuilder};
+use crate::{common::cuda_result::IntoCudaResult, decoder::NvDecoderBuilder};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
     cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,

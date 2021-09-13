@@ -7,7 +7,7 @@ extern crate simple_logger;
 mod utils;
 
 use anyhow::Result;
-use nv_video_codec::nvdecoder::{DecoderPacketFlags, NvDecoder};
+use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -29,7 +29,7 @@ fn init_cuda_ctx() -> Result<Context> {
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
     let decoder =
-        NvDecoder::builder(context, nv_video_codec::nvdecoder::types::Codec::HEVC).build()?;
+        NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC).build()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -46,7 +46,7 @@ fn run_basic_decode(
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::nvdecoder::types::Codec::HEVC)
+    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
         .use_device_frame(use_device_frame)
         .build()?;
 
@@ -124,7 +124,7 @@ fn run_torture_test(
 ) -> Result<()> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::nvdecoder::types::Codec::HEVC)
+    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
         .use_device_frame(use_device_frame)
         .build()?;
 

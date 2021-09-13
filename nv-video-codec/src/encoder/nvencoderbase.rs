@@ -14,7 +14,7 @@ use nv_video_codec_sys::{
     _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
 
-use crate::nvencoder::defaults::CustomDefault;
+use crate::encoder::defaults::CustomDefault;
 
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,

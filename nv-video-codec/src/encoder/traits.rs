@@ -7,7 +7,7 @@ use super::{
     nvencoderbase::{Device, NvEncInputFrame},
     NvEncoderError,
 };
-use crate::nvencoder::BufferFormat;
+use crate::encoder::BufferFormat;
 
 pub type NvEncoderResult<T> = Result<T, NvEncoderError>;
 pub trait NvEncoder {
@@ -106,7 +106,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             /// input buffer and then call EncodeFrame() function to encode it.
             fn get_next_input_frame(
                 &mut self,
-            ) -> &mut crate::nvencoder::nvencoderbase::NvEncInputFrame {
+            ) -> &mut crate::encoder::nvencoderbase::NvEncInputFrame {
                 self.encoder.get_next_input_frame()
             }
 
@@ -143,7 +143,7 @@ macro_rules! impl_nvencoder_wrapper_type {
             }
 
             /// This function is used to get the current device on which encoder is running.
-            fn get_device(&self) -> Option<&crate::nvencoder::nvencoderbase::Device> {
+            fn get_device(&self) -> Option<&crate::encoder::nvencoderbase::Device> {
                 self.encoder.get_device()
             }
 
@@ -184,9 +184,7 @@ macro_rules! impl_nvencoder_wrapper_type {
                 self.encoder.get_initialize_params()
             }
 
-            fn get_next_reference_frame(
-                &self,
-            ) -> &crate::nvencoder::nvencoderbase::NvEncInputFrame {
+            fn get_next_reference_frame(&self) -> &crate::encoder::nvencoderbase::NvEncInputFrame {
                 self.encoder.get_next_reference_frame()
             }
 

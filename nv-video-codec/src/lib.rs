@@ -15,5 +15,5 @@ extern crate parking_lot;
 
 #[macro_use]
 pub mod common;
-pub mod nvdecoder;
-pub mod nvencoder;
+pub mod decoder;
+pub mod encoder;
