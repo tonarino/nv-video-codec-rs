@@ -16,8 +16,7 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::nvencoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
-    guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
-    _NV_ENC_PIC_FLAGS::{NV_ENC_PIC_FLAG_FORCEIDR, NV_ENC_PIC_FLAG_OUTPUT_SPSPPS},
+    guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
 };
 use simple_logger::SimpleLogger;
 
@@ -153,7 +152,8 @@ fn encode_multi_frame_3k() -> Result<()> {
         let start_time = Instant::now();
         let params = NV_ENC_PIC_PARAMS {
             // force intra-frame and force per-frame metadata
-            encodePicFlags: NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS,
+            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0
+                | _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0,
             ..Default::default()
         };
         encoder.encode_frame_from_data(data, width, height, Some(params), &mut packet)?;
