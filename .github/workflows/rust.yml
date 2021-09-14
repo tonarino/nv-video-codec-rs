@@ -46,5 +46,10 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
+        env:
+          # Attach to Xorg that is running on the build machine. Needed for OpenGL interop.
+          DISPLAY: :0
         with:
           command: test
+          # Run only one test at a time, concurrency sometimes leads to out-of-memory on the GPU.
+          args: -- --test-threads 1
