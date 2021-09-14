@@ -595,9 +595,7 @@ where
 
     pub(super) fn register_input_resources(
         &mut self,
-        // TODO(efyang): make this not mut
-        // TODO(matej): remove the Box wrapping, slice of mere NV_ENC_..._TEX should do.
-        input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>],
+        input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
