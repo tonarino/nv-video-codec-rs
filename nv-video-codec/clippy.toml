@@ -1,4 +1,0 @@
-# NvDecoder::new() currently has 10 arguments, a couple of other functions have 8 arguments.
-# We may be able to lower this setting (up to the default of 7) once we revisit NvDecoder::new()
-# and related APIs.
-too-many-arguments-threshold = 10

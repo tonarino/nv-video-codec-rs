@@ -519,6 +519,7 @@ impl<ResourceManager> NvEncoderBase<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
@@ -593,6 +594,7 @@ where
         !self.encoder_handle.is_null() && self.encoder_initialized
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
         input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
@@ -696,6 +698,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
         buffer: &mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX,

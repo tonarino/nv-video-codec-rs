@@ -558,24 +558,11 @@ impl<'a> NvDecoder<'a> {
 
         -1
     }
-}
 
-impl<'a> NvDecoder<'a> {
-    pub fn new(
-        context: Context,
-        use_device_frame: bool,
-        codec: Codec,
-        low_latency: bool,
-        device_frame_pitched: bool,
-        crop_rect: Rect,
-        resize_dim: Dim,
-        max_width: u32,
-        max_height: u32,
-        clock_rate: u32,
-    ) -> Result<Box<Self>, NvDecoderError> {
+    pub(super) fn new(builder: NvDecoderBuilder) -> Result<Box<Self>, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
-            cuvidCtxLockCreate(&mut ctx_lock, context.get_inner() as *mut ffi::CUctx_st)
+            cuvidCtxLockCreate(&mut ctx_lock, builder.context.get_inner() as *mut ffi::CUctx_st)
                 .into_cuda_result()?;
             ctx_lock
         };
@@ -585,14 +572,14 @@ impl<'a> NvDecoder<'a> {
         // and then set the parser to the actual instantiated one
         let mut this = Box::new(Self {
             parser: std::ptr::null_mut(),
-            context,
-            use_device_frame,
-            codec,
-            device_frame_pitched,
-            crop_rect,
-            resize_dim,
-            max_width,
-            max_height,
+            context: builder.context,
+            use_device_frame: builder.use_device_frame,
+            codec: builder.codec,
+            device_frame_pitched: builder.device_frame_pitched,
+            crop_rect: builder.crop_rect,
+            resize_dim: builder.resize_dim,
+            max_width: builder.max_width,
+            max_height: builder.max_height,
             ctx_lock,
             bitdepth_minus_8: 0,
             chroma_format: ChromaFormat::YUV420,
@@ -621,10 +608,10 @@ impl<'a> NvDecoder<'a> {
 
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
-            CodecType: codec.into(),
+            CodecType: builder.codec.into(),
             ulMaxNumDecodeSurfaces: 1,
-            ulClockRate: clock_rate,
-            ulMaxDisplayDelay: if low_latency { 0 } else { 1 },
+            ulClockRate: builder.clock_rate,
+            ulMaxDisplayDelay: if builder.low_latency { 0 } else { 1 },
 
             pUserData: &mut *this as *mut NvDecoder as *mut c_void,
             pfnSequenceCallback: Some(handle_video_sequence_proc),
