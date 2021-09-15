@@ -51,5 +51,5 @@ jobs:
           DISPLAY: :0
         with:
           command: test
-          # Run only one test at a time, concurrency sometimes leads to out-of-memory on the GPU.
-          args: -- --test-threads 1
+          # Consumer GPUs only allow max 3 encoder sessions, limit concurrency.
+          args: -- --test-threads 3
