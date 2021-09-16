@@ -38,7 +38,7 @@ impl NvEncoderGLBuilder {
         Self { width, height, buffer_format, extra_output_delay, motion_estimation_only: false }
     }
 
-    pub fn build<'a>(self) -> Result<NvEncoderGL, NvEncoderError> {
+    pub fn build(self) -> Result<NvEncoderGL, NvEncoderError> {
         NvEncoderGL::new(
             self.width,
             self.height,

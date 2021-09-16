@@ -6,16 +6,16 @@ use super::{
 };
 
 pub struct NvDecoderBuilder {
-    context: Context,
-    use_device_frame: bool,
-    codec: Codec,
-    low_latency: bool,
-    device_frame_pitched: bool,
-    crop_rect: Rect,
-    resize_dim: Dim,
-    max_width: u32,
-    max_height: u32,
-    clock_rate: u32,
+    pub(super) context: Context,
+    pub(super) use_device_frame: bool,
+    pub(super) codec: Codec,
+    pub(super) low_latency: bool,
+    pub(super) device_frame_pitched: bool,
+    pub(super) crop_rect: Rect,
+    pub(super) resize_dim: Dim,
+    pub(super) max_width: u32,
+    pub(super) max_height: u32,
+    pub(super) clock_rate: u32,
 }
 
 impl NvDecoderBuilder {
@@ -51,17 +51,6 @@ impl NvDecoderBuilder {
     }
 
     pub fn build<'a>(self) -> Result<Box<NvDecoder<'a>>, NvDecoderError> {
-        NvDecoder::new(
-            self.context,
-            self.use_device_frame,
-            self.codec,
-            self.low_latency,
-            self.device_frame_pitched,
-            self.crop_rect,
-            self.resize_dim,
-            self.max_width,
-            self.max_height,
-            self.clock_rate,
-        )
+        NvDecoder::new(self)
     }
 }

@@ -14,7 +14,7 @@ use nv_video_codec_sys::{
     _NV_ENC_PIC_STRUCT, _NV_ENC_QP,
 };
 
-use crate::nvencoder::defaults::CustomDefault;
+use crate::encoder::defaults::CustomDefault;
 
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
@@ -159,14 +159,14 @@ where
             }
         }
 
-        self.initialize_params = encoder_params.clone();
-        self.initialize_params.version = NV_ENC_INITIALIZE_PARAMS_VER;
+        self.initialize_params =
+            NV_ENC_INITIALIZE_PARAMS { version: NV_ENC_INITIALIZE_PARAMS_VER, ..*encoder_params };
 
         if !encoder_params.encodeConfig.is_null() {
-            unsafe {
-                self.encode_config = (*encoder_params.encodeConfig).clone();
-            }
-            self.encode_config.version = NV_ENC_CONFIG_VER;
+            self.encode_config = NV_ENC_CONFIG {
+                version: NV_ENC_CONFIG_VER,
+                ..unsafe { *encoder_params.encodeConfig }
+            };
         } else {
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
@@ -184,7 +184,7 @@ where
                     )
                     .into_nvenc_result()?;
                 }
-                self.encode_config = preset_config.presetCfg.clone();
+                self.encode_config = preset_config.presetCfg;
             } else {
                 self.encode_config.version = NV_ENC_CONFIG_VER;
                 self.encode_config.rcParams.rateControlMode =
@@ -414,7 +414,7 @@ where
         }
 
         unsafe {
-            *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+            *initialize_params.encodeConfig = preset_config.presetCfg;
             (*initialize_params.encodeConfig).frameIntervalP = 1;
             (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
             (*initialize_params.encodeConfig).rcParams.rateControlMode =
@@ -437,7 +437,7 @@ where
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
-                *initialize_params.encodeConfig = preset_config.presetCfg.clone();
+                *initialize_params.encodeConfig = preset_config.presetCfg;
             }
         } else {
             self.encode_config.version = NV_ENC_CONFIG_VER;
@@ -519,6 +519,7 @@ impl<ResourceManager> NvEncoderBase<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
@@ -593,6 +594,7 @@ where
         !self.encoder_handle.is_null() && self.encoder_initialized
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
         input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
@@ -696,6 +698,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
         buffer: &mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX,

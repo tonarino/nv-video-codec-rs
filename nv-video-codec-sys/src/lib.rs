@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::redundant_static_lifetimes)]
+#![allow(clippy::too_many_arguments)]
 // broken links from bindgen
 #![allow(rustdoc::broken_intra_doc_links)]
 // https://github.com/rust-lang/rust-bindgen/issues/1651

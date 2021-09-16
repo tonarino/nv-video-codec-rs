@@ -99,6 +99,8 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
     }
 }
 
+// Vec<Box<_>> required by current [NvEncoderBase::register_input_resources] signature.
+#[allow(clippy::vec_box)]
 static mut ALLOCATED_FRAMES: Vec<Vec<Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>>> = Vec::new();
 pub(super) struct NvEncoderGLResourceManager {}
 
