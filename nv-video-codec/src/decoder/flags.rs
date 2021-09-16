@@ -16,8 +16,8 @@ bitflags! {
     }
 }
 
-impl Into<CUvideopacketflags::Type> for DecoderPacketFlags {
-    fn into(self) -> CUvideopacketflags::Type {
-        self.bits as CUvideopacketflags::Type
+impl From<DecoderPacketFlags> for CUvideopacketflags::Type {
+    fn from(other: DecoderPacketFlags) -> Self {
+        other.bits as Self
     }
 }

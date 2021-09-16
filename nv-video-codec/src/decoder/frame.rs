@@ -9,8 +9,8 @@ pub enum FrameData<'a> {
     // DevicePitched(&'a [u8]),
 }
 
-impl<'a> FrameData<'a> {
-    pub fn as_mut(&mut self) -> &mut [u8] {
+impl<'a> AsMut<[u8]> for FrameData<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
         match self {
             Self::Owned(v) => v,
             Self::Device(s) => *s,

@@ -2,14 +2,14 @@ use super::{
     types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
     FrameData,
 };
-use crate::{common::cuda_result::IntoCudaResult, nvdecoder::NvDecoderBuilder};
+use crate::{common::cuda_result::IntoCudaResult, decoder::NvDecoderBuilder};
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
-    cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture,
-    cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus,
-    cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, size_t,
-    cudaVideoCreateFlags_enum,
-    CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
+    cudaVideoCreateFlags_enum, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
+    cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
+    cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
+    cuvidUnmapVideoFrame64, size_t, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
+    CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
     CUVIDGETDECODESTATUS, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS,
@@ -110,7 +110,7 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_within_context<'a, F, T>(context: &'a Context, mut func: F)
+fn do_within_context<F, T>(context: &Context, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
@@ -148,10 +148,12 @@ impl<'a> NvDecoder<'a> {
         }
 
         self.video_info = format!("Video Input Information:\n{:#?}", video_format);
-        let mut decode_caps = CUVIDDECODECAPS::default();
-        decode_caps.eCodecType = video_format.codec;
-        decode_caps.eChromaFormat = video_format.chroma_format;
-        decode_caps.nBitDepthMinus8 = video_format.bit_depth_luma_minus8 as u32;
+        let mut decode_caps = CUVIDDECODECAPS {
+            eCodecType: video_format.codec,
+            eChromaFormat: video_format.chroma_format,
+            nBitDepthMinus8: video_format.bit_depth_luma_minus8 as u32,
+            ..Default::default()
+        };
         do_within_context(&self.context, || unsafe {
             cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
         });
@@ -220,26 +222,26 @@ impl<'a> NvDecoder<'a> {
         // TODO(efyang) : create safe wrapper over VideoFormat
         self.video_format = video_format;
 
-        let mut video_decode_create_info = CUVIDDECODECREATEINFO::default();
-        video_decode_create_info.CodecType = video_format.codec;
-        video_decode_create_info.ChromaFormat = video_format.chroma_format;
-        video_decode_create_info.OutputFormat = self.output_format.into();
-        video_decode_create_info.bitDepthMinus8 = video_format.bit_depth_luma_minus8 as u64;
-        if video_format.progressive_sequence != 0 {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Weave.into();
-        } else {
-            video_decode_create_info.DeinterlaceMode = DeinterlaceMode::Adaptive.into();
-        }
-        video_decode_create_info.ulNumOutputSurfaces = 2;
-        // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
-        video_decode_create_info.ulCreationFlags = {
-            let cf: cudaVideoCreateFlags_enum = CreateFlags::PreferCUVID.into();
-            cf.0 as u64
+        let mut video_decode_create_info = CUVIDDECODECREATEINFO {
+            CodecType: video_format.codec,
+            ChromaFormat: video_format.chroma_format,
+            OutputFormat: self.output_format.into(),
+            bitDepthMinus8: video_format.bit_depth_luma_minus8 as u64,
+            DeinterlaceMode: if video_format.progressive_sequence != 0 {
+                DeinterlaceMode::Weave.into()
+            } else {
+                DeinterlaceMode::Adaptive.into()
+            },
+            ulNumOutputSurfaces: 2,
+            // With PreferCUVID, JPEG is still decoded by CUDA while video is decoded by NVDEC hardware
+            ulCreationFlags: cudaVideoCreateFlags_enum::from(CreateFlags::PreferCUVID).0 as u64,
+            ulNumDecodeSurfaces: decode_surface as u64,
+            vidLock: self.ctx_lock,
+            ulWidth: video_format.coded_width as u64,
+            ulHeight: video_format.coded_height as u64,
+            ..Default::default()
         };
-        video_decode_create_info.ulNumDecodeSurfaces = decode_surface as u64;
-        video_decode_create_info.vidLock = self.ctx_lock;
-        video_decode_create_info.ulWidth = video_format.coded_width as u64;
-        video_decode_create_info.ulHeight = video_format.coded_height as u64;
+
         // AV1 has max width/height of sequence in sequence header
         if matches!(video_format.codec.try_into().unwrap(), Codec::AV1)
             && video_format.seqhdr_data_length > 0
@@ -254,8 +256,8 @@ impl<'a> NvDecoder<'a> {
         video_decode_create_info.ulMaxWidth = self.max_width as u64;
         video_decode_create_info.ulMaxHeight = self.max_height as u64;
 
-        if !(self.crop_rect.right != 0 && self.crop_rect.bottom != 0)
-            && !(self.resize_dim.width != 0 && self.resize_dim.height != 0)
+        if (self.crop_rect.right == 0 || self.crop_rect.bottom == 0)
+            && (self.resize_dim.width == 0 || self.resize_dim.height == 0)
         {
             self.width = (video_format.display_area.right - video_format.display_area.left) as u32;
             self.luma_height =
@@ -333,7 +335,7 @@ impl<'a> NvDecoder<'a> {
             cuvidDecodePicture(self.decoder, pic_params)
         });
 
-        return 1;
+        1
     }
 
     /* Return value from HandlePictureDisplay() are interpreted as:
@@ -343,13 +345,14 @@ impl<'a> NvDecoder<'a> {
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
-        let mut video_processing_parameters = CUVIDPROCPARAMS::default();
-        video_processing_parameters.progressive_frame = disp_info.progressive_frame;
-        video_processing_parameters.second_field = disp_info.repeat_first_field + 1;
-        video_processing_parameters.top_field_first = disp_info.top_field_first;
-        video_processing_parameters.unpaired_field =
-            if disp_info.repeat_first_field < 0 { 1 } else { 0 };
-        video_processing_parameters.output_stream = self.stream;
+        let mut video_processing_parameters = CUVIDPROCPARAMS {
+            progressive_frame: disp_info.progressive_frame,
+            second_field: disp_info.repeat_first_field + 1,
+            top_field_first: disp_info.top_field_first,
+            unpaired_field: if disp_info.repeat_first_field < 0 { 1 } else { 0 },
+            output_stream: self.stream,
+            ..Default::default()
+        };
 
         let mut src_frame: CUdeviceptr = 0;
         let mut src_pitch = 0;
@@ -463,24 +466,26 @@ impl<'a> NvDecoder<'a> {
 
         // NOTE: memcpys take about 1ms total here
         // Copy luma plane
-        let mut m = CUDA_MEMCPY2D::default();
-        m.srcMemoryType = CUmemorytype_enum::CU_MEMORYTYPE_DEVICE;
-        m.srcDevice = src_frame;
-        m.srcPitch = src_pitch as u64;
-        m.dstMemoryType = if self.use_device_frame {
-            CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
-        } else {
-            CUmemorytype_enum::CU_MEMORYTYPE_HOST
+        let mut m = CUDA_MEMCPY2D {
+            srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
+            srcDevice: src_frame,
+            srcPitch: src_pitch as u64,
+            dstMemoryType: if self.use_device_frame {
+                CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
+            } else {
+                CUmemorytype_enum::CU_MEMORYTYPE_HOST
+            },
+            dstHost: decoded_frame_ptr as *mut c_void,
+            dstDevice: decoded_frame_ptr as CUdeviceptr,
+            dstPitch: if self.device_frame_pitch != 0 {
+                self.device_frame_pitch
+            } else {
+                (self.get_width() * self.bpp as u32) as u64
+            },
+            WidthInBytes: (self.get_width() * self.bpp as u32) as u64,
+            Height: self.luma_height as u64,
+            ..Default::default()
         };
-        m.dstHost = decoded_frame_ptr as *mut c_void;
-        m.dstDevice = decoded_frame_ptr as CUdeviceptr;
-        m.dstPitch = if self.device_frame_pitch != 0 {
-            self.device_frame_pitch
-        } else {
-            (self.get_width() * self.bpp as u32) as u64
-        };
-        m.WidthInBytes = (self.get_width() * self.bpp as u32) as u64;
-        m.Height = self.luma_height as u64;
         unsafe {
             cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
         }
@@ -551,26 +556,13 @@ impl<'a> NvDecoder<'a> {
             }
         }
 
-        return -1;
+        -1
     }
-}
 
-impl<'a> NvDecoder<'a> {
-    pub fn new(
-        context: Context,
-        use_device_frame: bool,
-        codec: Codec,
-        low_latency: bool,
-        device_frame_pitched: bool,
-        crop_rect: Rect,
-        resize_dim: Dim,
-        max_width: u32,
-        max_height: u32,
-        clock_rate: u32,
-    ) -> Result<Box<Self>, NvDecoderError> {
+    pub(super) fn new(builder: NvDecoderBuilder) -> Result<Box<Self>, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
-            cuvidCtxLockCreate(&mut ctx_lock, context.get_inner() as *mut ffi::CUctx_st)
+            cuvidCtxLockCreate(&mut ctx_lock, builder.context.get_inner() as *mut ffi::CUctx_st)
                 .into_cuda_result()?;
             ctx_lock
         };
@@ -580,14 +572,14 @@ impl<'a> NvDecoder<'a> {
         // and then set the parser to the actual instantiated one
         let mut this = Box::new(Self {
             parser: std::ptr::null_mut(),
-            context,
-            use_device_frame,
-            codec,
-            device_frame_pitched,
-            crop_rect,
-            resize_dim,
-            max_width,
-            max_height,
+            context: builder.context,
+            use_device_frame: builder.use_device_frame,
+            codec: builder.codec,
+            device_frame_pitched: builder.device_frame_pitched,
+            crop_rect: builder.crop_rect,
+            resize_dim: builder.resize_dim,
+            max_width: builder.max_width,
+            max_height: builder.max_height,
             ctx_lock,
             bitdepth_minus_8: 0,
             chroma_format: ChromaFormat::YUV420,
@@ -616,10 +608,10 @@ impl<'a> NvDecoder<'a> {
 
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
-            CodecType: codec.into(),
+            CodecType: builder.codec.into(),
             ulMaxNumDecodeSurfaces: 1,
-            ulClockRate: clock_rate,
-            ulMaxDisplayDelay: if low_latency { 0 } else { 1 },
+            ulClockRate: builder.clock_rate,
+            ulMaxDisplayDelay: if builder.low_latency { 0 } else { 1 },
 
             pUserData: &mut *this as *mut NvDecoder as *mut c_void,
             pfnSequenceCallback: Some(handle_video_sequence_proc),
@@ -664,7 +656,7 @@ impl<'a> NvDecoder<'a> {
             timestamp,
         };
 
-        if data.len() == 0 {
+        if data.is_empty() {
             packet.flags |= CUVID_PKT_ENDOFSTREAM as c_ulong;
         }
 
@@ -686,7 +678,7 @@ impl<'a> NvDecoder<'a> {
             self.decoded_frames -= 1;
             self.decoded_frames_returned += 1;
             Some(MutexGuard::map(frames_locked, |frames| {
-                &mut frames[self.decoded_frames_returned - 1 as usize]
+                &mut frames[self.decoded_frames_returned - 1]
             }))
         } else {
             None
@@ -724,7 +716,7 @@ impl<'a> NvDecoder<'a> {
 
     pub fn get_height(&self) -> u32 {
         assert!(self.luma_height != 0);
-        return self.luma_height;
+        self.luma_height
     }
 
     pub fn get_frame_size(&self) -> u32 {
@@ -734,7 +726,7 @@ impl<'a> NvDecoder<'a> {
             * self.bpp as u32
     }
 
-    pub fn set_reconfig_params() -> Result<(), ()> {
+    pub fn set_reconfig_params() -> Result<(), NvDecoderError> {
         todo!()
     }
 

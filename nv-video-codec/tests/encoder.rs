@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::nvencoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
+use nv_video_codec::encoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
     guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
 };
@@ -121,7 +121,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
 
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
-        f.write_all(&frame)?;
+        f.write_all(frame)?;
     }
 
     encoder.end_encode(&mut packet)?;
@@ -183,7 +183,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     );
 
     for frame in &packet {
-        f.write_all(&frame)?;
+        f.write_all(frame)?;
     }
 
     encoder.end_encode(&mut packet)?;
