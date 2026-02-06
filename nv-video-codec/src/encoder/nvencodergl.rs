@@ -99,9 +99,6 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
     }
 }
 
-// Vec<Box<_>> required by current [NvEncoderBase::register_input_resources] signature.
-#[allow(clippy::vec_box)]
-static mut ALLOCATED_FRAMES: Vec<Vec<Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>>> = Vec::new();
 pub(super) struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
@@ -155,12 +152,9 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                 input_frames.push(resource);
             }
 
-            unsafe {
-                // for testing, and only run in single-threaded test - so mutable static should be perfectly safe
-                ALLOCATED_FRAMES.push(input_frames);
-
-                encoder.register_input_resources(
-                    &mut ALLOCATED_FRAMES[ALLOCATED_FRAMES.len() - 1],
+            encoder.register_input_resources(
+                    // TODO: do not leak but store until `release_input_buffers()` is called.
+                    input_frames.leak(),
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),
@@ -168,7 +162,6 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                     pixel_format,
                     count == 1
                 )?;
-            }
         }
         Ok(())
     }
