@@ -64,16 +64,28 @@ fn main() {
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
         .constified_enum_module("CUvideopacketflags")
         .newtype_enum(".*")
-        .blocklist_item("NV_ENC_.*_GUID")
-        .allowlist_var("(?i)(.*cu.*|.*nv.*)")
-        .allowlist_type("(?i)(.*cu.*|.*nv.*)")
-        .allowlist_function("(?i)(.*cu.*|.*nv.*)")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        // TODO: enable again if we can avoid blacklisting GUID symbols.
+        //.allowlist_var("(?i)(.*cu.*|.*nv.*)")
+        //.allowlist_type("(?i)(.*cu.*|.*nv.*)")
+        //.allowlist_function("(?i)(.*cu.*|.*nv.*)")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .derive_default(true)
+        // NOTE: This produces warnings about function pointer comparisons.
         .derive_partialeq(true)
         .derive_debug(true)
         .generate()
         .expect("Unable to generate bindings");
+
+    // min working version
+    /*
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .clang_arg("-IVideo_Codec_SDK_11.0.10/Interface")
+        .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()
+        .expect("Unable to generate bindings");
+    */
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = out_dir();
