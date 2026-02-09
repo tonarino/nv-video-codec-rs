@@ -345,10 +345,11 @@ where
         match self.get_pixel_format() {
             BufferFormat::YV12 | BufferFormat::IYUV | BufferFormat::NV12 => Ok(self
                 .get_encode_width()
-                * (self.get_encode_height() + (self.get_encode_height() + 1) / 2)),
+                * (self.get_encode_height() + self.get_encode_height().div_ceil(2))),
+
             BufferFormat::YUV420_10BIT => Ok(2
                 * self.get_encode_width()
-                * (self.get_encode_height() + (self.get_encode_height() + 1) / 2)),
+                * (self.get_encode_height() + self.get_encode_height().div_ceil(2))),
             BufferFormat::YUV444 => Ok(self.get_encode_width() * self.get_encode_height() * 3),
             BufferFormat::YUV444_10BIT => {
                 Ok(2 * self.get_encode_width() * self.get_encode_height() * 3)
@@ -848,7 +849,7 @@ where
     fn send_eos(&mut self) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0 as u32,
+            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0,
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,

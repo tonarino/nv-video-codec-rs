@@ -56,6 +56,14 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
+    let function_pointer_structs = [
+        "_CUVIDPARSERPARAMS",
+        "_CUVIDSOURCEPARAMS",
+        "_NV_ENCODE_API_FUNCTION_LIST",
+        "CUDA_HOST_NODE_PARAMS_st",
+        "CUDA_HOST_NODE_PARAMS_v2_st",
+    ];
+
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg("-IVideo_Codec_SDK_11.0.10/Interface")
@@ -64,14 +72,15 @@ fn main() {
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
         .constified_enum_module("CUvideopacketflags")
         .newtype_enum(".*")
-        .blocklist_item("NV_ENC_.*_GUID")
-        .allowlist_var("(?i)(.*cu.*|.*nv.*)")
-        .allowlist_type("(?i)(.*cu.*|.*nv.*)")
-        .allowlist_function("(?i)(.*cu.*|.*nv.*)")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .derive_default(true)
         .derive_partialeq(true)
+        // NOTE: These structs contain function pointers, comparisons are not meaningful.
+        .no_partialeq(function_pointer_structs.join("|"))
         .derive_debug(true)
+        // NOTE: `cuMemBatchDecompressAsync` in `cuda.h` has a comment that produces invalid docs.
+        // TODO: disable only that one particular comment.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate bindings");
 

@@ -8,7 +8,7 @@ use ffi::{
     cudaVideoCreateFlags_enum, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
     cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
     cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
-    cuvidUnmapVideoFrame64, size_t, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
+    cuvidUnmapVideoFrame64, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
     CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
@@ -47,7 +47,7 @@ pub struct NvDecoder<'a> {
     bitdepth_minus_8: i32,
     bpp: i32,
     display_rect: Rect,
-    device_frame_pitch: size_t,
+    device_frame_pitch: usize,
 
     decoded_frames: usize,
     decoded_frames_returned: usize,
@@ -423,9 +423,9 @@ impl<'a> NvDecoder<'a> {
                             cuMemAllocPitch_v2(
                                 &mut frame_data_device_ptr,
                                 &mut self.device_frame_pitch,
-                                (self.get_width() * self.bpp as u32) as size_t,
+                                (self.get_width() * self.bpp as u32) as usize,
                                 (self.luma_height + self.chroma_height * self.num_chroma_planes)
-                                    as size_t,
+                                    as usize,
                                 16,
                             )
                             .into_cuda_result()
@@ -434,9 +434,12 @@ impl<'a> NvDecoder<'a> {
                         todo!();
                     } else {
                         unsafe {
-                            cuMemAlloc_v2(&mut frame_data_device_ptr, self.get_frame_size() as u64)
-                                .into_cuda_result()
-                                .unwrap();
+                            cuMemAlloc_v2(
+                                &mut frame_data_device_ptr,
+                                self.get_frame_size() as usize,
+                            )
+                            .into_cuda_result()
+                            .unwrap();
                         }
                     }
                     unsafe {
@@ -469,7 +472,7 @@ impl<'a> NvDecoder<'a> {
         let mut m = CUDA_MEMCPY2D {
             srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
             srcDevice: src_frame,
-            srcPitch: src_pitch as u64,
+            srcPitch: src_pitch as usize,
             dstMemoryType: if self.use_device_frame {
                 CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
             } else {
@@ -480,10 +483,10 @@ impl<'a> NvDecoder<'a> {
             dstPitch: if self.device_frame_pitch != 0 {
                 self.device_frame_pitch
             } else {
-                (self.get_width() * self.bpp as u32) as u64
+                (self.get_width() * self.bpp as u32) as usize
             },
-            WidthInBytes: (self.get_width() * self.bpp as u32) as u64,
-            Height: self.luma_height as u64,
+            WidthInBytes: (self.get_width() * self.bpp as u32) as usize,
+            Height: self.luma_height as usize,
             ..Default::default()
         };
         unsafe {
@@ -494,10 +497,10 @@ impl<'a> NvDecoder<'a> {
         // NVDEC output has luma height aligned by 2. Adjust chroma offset by aligning height
         m.srcDevice =
             (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1))) as CUdeviceptr;
-        m.dstHost = ((decoded_frame_ptr) as CUdeviceptr + (m.dstPitch * self.luma_height as u64))
-            as *mut c_void;
+        m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
+            + (m.dstPitch as u64 * self.luma_height as u64)) as *mut c_void;
         m.dstDevice = m.dstHost as CUdeviceptr;
-        m.Height = self.chroma_height as u64;
+        m.Height = self.chroma_height as usize;
         unsafe {
             cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
         }
@@ -506,10 +509,10 @@ impl<'a> NvDecoder<'a> {
             m.srcDevice = (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1) * 2))
                 as CUdeviceptr;
             m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
-                + (m.dstPitch * self.luma_height as u64 * 2))
+                + (m.dstPitch as u64 * self.luma_height as u64 * 2))
                 as *mut c_void;
             m.dstDevice = m.dstHost as CUdeviceptr;
-            m.Height = self.chroma_height as u64;
+            m.Height = self.chroma_height as usize;
             unsafe {
                 cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
             }
@@ -650,7 +653,7 @@ impl<'a> NvDecoder<'a> {
         self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
-            flags: (flags as u32 | CUVID_PKT_TIMESTAMP as u32) as c_ulong,
+            flags: (flags as u32 | CUVID_PKT_TIMESTAMP) as c_ulong,
             payload_size: data.len() as u64,
             payload: data.as_ptr(),
             timestamp,
