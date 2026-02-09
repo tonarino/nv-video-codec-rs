@@ -1,4 +1,4 @@
-# nv-codec-video-rs
+# nv-video-codec-rs
 
 This project wraps NVIDIA Video Codec SDK 11.0 for use in Rust. Both unsafe FFI and safe
 higher-level bindings are provided.
@@ -72,19 +72,11 @@ impl NvDecoder {
 ```
 
 1. `NvDecoder` can be obtained with `NvDecoder::builder().x().y().z().build()`, provided a
-   `rustacuda` has been created.
-1. The decoder is then fed with `NvDecoder::decode(data, flags, timestamp)`, which makes it parse
-   and process the data.
-1. If decoding was successful the results can be queried with methods like `NvDecoder::get_width()`,
+   `rustacuda` `Context` has been created.
+1. The decoder is then fed with `NvDecoder::decode(data, ...)`, which makes it parse and process
+   the `data`.
+1. If decoding is successful the results can be queried with methods like `NvDecoder::get_width()`,
    `NvDecoder::get_height()` and `NvDecoder::get_frame()` to get the actual data.
    - The frame data locality can be controlled with `NvDecoderBuilder::use_device_frame()`.
-   - There does not seem to be any code to process the device pointers when opting for
+   - There does not seem to be any code yet to process the device pointers when opting for
      `use_device_frame(true)`.
-
-## TODO
-
-- [ ] Check open issues and PRs.
-- [ ] Check TODOs in the code.
-- [ ] Manually check the encoding and decoding results.
-- [ ] Try plugging the crate into `portal` and see what's missing.
-- [ ] Test sequence roundtrip and latency.
