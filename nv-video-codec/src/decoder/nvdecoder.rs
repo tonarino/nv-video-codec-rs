@@ -653,7 +653,7 @@ impl<'a> NvDecoder<'a> {
         self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
-            flags: (flags as u32 | CUVID_PKT_TIMESTAMP as u32) as c_ulong,
+            flags: (flags as u32 | CUVID_PKT_TIMESTAMP) as c_ulong,
             payload_size: data.len() as u64,
             payload: data.as_ptr(),
             timestamp,

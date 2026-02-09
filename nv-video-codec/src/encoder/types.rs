@@ -46,7 +46,7 @@ impl BufferFormat {
     pub fn get_chroma_pitch(&self, luma_pitch: u32) -> Result<u32, NvEncoderError> {
         match &self {
             Self::NV12 | Self::YUV420_10BIT | Self::YUV444 | Self::YUV444_10BIT => Ok(luma_pitch),
-            Self::YV12 | Self::IYUV => Ok((luma_pitch + 1) / 2),
+            Self::YV12 | Self::IYUV => Ok(luma_pitch.div_ceil(2)),
             Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
             _ => Err(NvEncError::InvalidParam.into()),
         }
@@ -80,7 +80,7 @@ impl BufferFormat {
 
     pub fn get_chroma_width_in_bytes(&self, luma_width: u32) -> Result<u32, NvEncoderError> {
         match &self {
-            Self::YV12 | Self::IYUV => Ok((luma_width + 1) / 2),
+            Self::YV12 | Self::IYUV => Ok(luma_width.div_ceil(2)),
             Self::NV12 => Ok(luma_width),
             Self::YUV420_10BIT => Ok(2 * luma_width),
             Self::YUV444 => Ok(luma_width),
