@@ -11,6 +11,11 @@
 #![allow(deref_nullptr)]
 // https://github.com/rust-lang/rust-bindgen/issues/2807
 #![allow(unnecessary_transmutes)]
+// https://github.com/rust-lang/rust-bindgen/issues/2807
+#![allow(clippy::useless_transmute)]
+#![allow(clippy::missing_safety_doc)]
+// https://github.com/rust-lang/rust-bindgen/issues/3053
+#![allow(clippy::ptr_offset_with_cast)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
