@@ -78,6 +78,9 @@ fn main() {
         // NOTE: These structs contain function pointers, comparisons are not meaningful.
         .no_partialeq(function_pointer_structs.join("|"))
         .derive_debug(true)
+        // NOTE: `cuMemBatchDecompressAsync` in `cuda.h` has a comment that produces invalid docs.
+        // TODO: disable only that one particular comment.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate bindings");
 
