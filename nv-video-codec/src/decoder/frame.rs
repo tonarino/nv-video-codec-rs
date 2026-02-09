@@ -13,7 +13,7 @@ impl<'a> AsMut<[u8]> for FrameData<'a> {
     fn as_mut(&mut self) -> &mut [u8] {
         match self {
             Self::Owned(v) => v,
-            Self::Device(s) => *s,
+            Self::Device(s) => s,
         }
     }
 }

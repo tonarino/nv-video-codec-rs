@@ -96,7 +96,7 @@ impl IntoNvEncResult for NVENCSTATUS {
                 Err(NvEncError::ResourceNotRegistered)
             },
             NVENCSTATUS::NV_ENC_ERR_RESOURCE_NOT_MAPPED => Err(NvEncError::ResourceNotMapped),
-            _ => Err(NvEncError::Unrecognized(self.0 as u32)),
+            _ => Err(NvEncError::Unrecognized(self.0)),
         }
     }
 }
