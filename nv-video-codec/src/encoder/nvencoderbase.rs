@@ -373,8 +373,11 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        let mut encode_config =
+        let encode_config =
             NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() };
+        // NOTE: Leaking to have a stable address to point to in the `encodeConfig` field below.
+        // TODO(mbernat): Wrap these structs so that we can reduce the `unsafe` and pointer usage.
+        let encode_config = Box::leak(Box::new(encode_config));
 
         // nvpipe doesn't even use this
         let mut initialize_params = NV_ENC_INITIALIZE_PARAMS {
@@ -388,7 +391,7 @@ where
             frameRateNum: 30, // TODO(efyang): possible optimization?
             frameRateDen: 1,
             enablePTD: 1,
-            encodeConfig: &mut encode_config,
+            encodeConfig: &raw mut *encode_config,
             maxEncodeWidth: self.width,
             maxEncodeHeight: self.height,
             ..Default::default()
