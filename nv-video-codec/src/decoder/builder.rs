@@ -2,10 +2,11 @@ use rustacuda::context::Context;
 
 use super::{
     types::{Codec, Dim, Rect},
-    NvDecoder, NvDecoderError,
+    NvDecoderError,
 };
+use crate::decoder::Decoder;
 
-pub struct NvDecoderBuilder {
+pub struct DecoderBuilder {
     pub(super) context: Context,
     pub(super) use_device_frame: bool,
     pub(super) codec: Codec,
@@ -18,7 +19,7 @@ pub struct NvDecoderBuilder {
     pub(super) clock_rate: u32,
 }
 
-impl NvDecoderBuilder {
+impl DecoderBuilder {
     builder_field_setter!(use_device_frame: bool);
 
     builder_field_setter!(low_latency: bool);
@@ -50,7 +51,7 @@ impl NvDecoderBuilder {
         }
     }
 
-    pub fn build<'a>(self) -> Result<Box<NvDecoder<'a>>, NvDecoderError> {
-        NvDecoder::new(self)
+    pub fn build(self) -> Result<Decoder, NvDecoderError> {
+        Decoder::new(self)
     }
 }

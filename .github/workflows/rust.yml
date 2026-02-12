@@ -71,6 +71,4 @@ jobs:
         with:
           command: test
           # Consumer GPUs only allow max 3 encoder sessions, limit concurrency.
-          # TODO(mbernat): Remove `--test encoder` once the decoder gets fixes.
-          # https://github.com/tonarino/nv-video-codec-rs/issues/43
-          args: --release --test encoder -- --test-threads 3
+          args: --release -- --test-threads 3
