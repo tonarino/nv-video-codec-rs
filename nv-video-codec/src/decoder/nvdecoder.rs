@@ -823,8 +823,11 @@ impl FrameInfo {
 
     pub fn get_width(&self) -> u32 {
         assert!(self.width != 0);
-        if matches!(self.output_format, SurfaceFormat::NV12 | SurfaceFormat::P016) {
-            (self.width + 1) & !1
+        if self.width % 2 == 1
+            && matches!(self.output_format, SurfaceFormat::NV12 | SurfaceFormat::P016)
+        {
+            // Add 1 to odd numbers: these 4:2:0 formats require an even width.
+            self.width + 1
         } else {
             self.width
         }
