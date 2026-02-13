@@ -21,9 +21,9 @@ use ffi::{
 use nv_video_codec_sys as ffi;
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
+    cell::UnsafeCell,
     collections::VecDeque,
     convert::TryInto,
-    mem::forget,
     os::raw::{c_int, c_ulong, c_void},
     ptr::null_mut,
     time::Instant,
@@ -619,6 +619,8 @@ impl NvDecoder {
 
 impl Drop for NvDecoder {
     fn drop(&mut self) {
+        let instant = Instant::now();
+
         if !self.decoder.is_null() {
             unsafe {
                 let err = cuvidDestroyDecoder(self.decoder);
@@ -641,28 +643,13 @@ impl Drop for NvDecoder {
             let err = cuvidCtxLockDestroy(self.ctx_lock);
             err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");
         }
+
+        println!("NvDecoder::drop() duration: {:?}", instant.elapsed());
     }
 }
-
 pub struct Decoder {
-    decoded_frames: usize,
-    decoded_frames_returned: usize,
-    // TODO: support multithreading by adding a mutex here?
-    frames: VecDeque<Frame>,
-
-    output_format: SurfaceFormat,
-    bpp: i32,
-    video_info: String,
-
-    /// output dimensions
-    width: u32,
-    luma_height: u32,
-    chroma_height: u32,
-    num_chroma_planes: u32,
-
     parser: CUvideoparser,
-    // TODO: do we need some phantom data?
-    nv_decoder: *mut NvDecoder,
+    nv_decoder: UnsafeCell<Box<NvDecoder>>,
 }
 
 impl Decoder {
@@ -671,7 +658,9 @@ impl Decoder {
         let clock_rate = builder.clock_rate;
         let low_latency = builder.low_latency;
 
-        let nv_decoder = Box::into_raw(Box::new(NvDecoder::new(builder)?));
+        let mut nv_decoder_box = Box::new(NvDecoder::new(builder)?);
+        let nv_decoder_ptr: *mut NvDecoder = &raw mut *nv_decoder_box;
+        let nv_decoder = UnsafeCell::new(nv_decoder_box);
 
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
@@ -680,7 +669,7 @@ impl Decoder {
             ulClockRate: clock_rate,
             ulMaxDisplayDelay: if low_latency { 0 } else { 1 },
 
-            pUserData: nv_decoder as *mut c_void,
+            pUserData: nv_decoder_ptr as *mut c_void,
             pfnSequenceCallback: Some(handle_video_sequence_proc),
             pfnDecodePicture: Some(handle_picture_decode_proc),
             pfnDisplayPicture: Some(handle_picture_display_proc),
@@ -702,23 +691,7 @@ impl Decoder {
             ffi::cuvidCreateVideoParser(&raw mut parser, &raw mut params).into_cuda_result()?;
         }
 
-        Ok(Self {
-            decoded_frames: 0,
-            decoded_frames_returned: 0,
-            frames: VecDeque::new(),
-
-            output_format: SurfaceFormat::NV12,
-            bpp: 1,
-            video_info: "".to_string(),
-
-            width: 0,
-            luma_height: 0,
-            chroma_height: 0,
-            num_chroma_planes: 0,
-
-            parser,
-            nv_decoder,
-        })
+        Ok(Self { parser, nv_decoder })
     }
 
     /// Returns the number of frames decoded
@@ -726,13 +699,11 @@ impl Decoder {
     /// # Arguments
     /// * arg
     pub fn decode(
-        &mut self,
+        &self,
         data: &[u8],
         flags: DecoderPacketFlags,
         timestamp: i64,
-    ) -> Result<usize, NvDecoderError> {
-        self.decoded_frames_returned = 0;
-
+    ) -> Result<DecodingOutput, NvDecoderError> {
         let flags: CUvideopacketflags::Type = flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
             flags: (flags as u32 | CUVID_PKT_TIMESTAMP) as c_ulong,
@@ -745,16 +716,82 @@ impl Decoder {
             packet.flags |= CUVID_PKT_ENDOFSTREAM as c_ulong;
         }
 
-        self.sync_to_nv_decoder();
+        self.prepare_nv_decoder();
 
         unsafe {
             cuvidParseVideoData(self.parser, &mut packet as *mut CUVIDSOURCEDATAPACKET)
                 .into_cuda_result()?;
         }
 
-        self.sync_from_nv_decoder();
+        Ok(self.get_nv_decoder_output())
+    }
 
-        Ok(self.decoded_frames)
+    fn prepare_nv_decoder(&self) {
+        // SAFETY: `self.nv_decoder` is valid for the duration of `Self` and is only accessed by
+        // private methods and `cuvidParseVideoData` in turns, so there is no aliasing.
+        let nv_decoder = unsafe {
+            self.nv_decoder.get().as_mut().expect("self.nv_encoder can be borrowed mutably")
+        };
+
+        nv_decoder.decoded_frames = 0;
+        nv_decoder.stream = std::ptr::null_mut();
+        // TODO: write more fields
+    }
+
+    fn get_nv_decoder_output(&self) -> DecodingOutput {
+        // SAFETY: `self.nv_decoder` is valid for the duration of `Self` and is only accessed by
+        // private methods and `cuvidParseVideoData` in turns, so there is no aliasing.
+        let nv_decoder =
+            unsafe { self.nv_decoder.get().as_ref().expect("self.nv_encoder can be borrowed") };
+
+        DecodingOutput {
+            decoded_frames: nv_decoder.decoded_frames,
+            decoded_frames_returned: 0,
+            frames: nv_decoder.frames.clone(),
+            output_format: nv_decoder.output_format,
+            bpp: nv_decoder.bpp,
+            video_info: nv_decoder.video_info.clone(),
+            width: nv_decoder.width,
+            luma_height: nv_decoder.luma_height,
+            chroma_height: nv_decoder.chroma_height,
+            num_chroma_planes: nv_decoder.num_chroma_planes,
+        }
+    }
+}
+
+pub struct DecodingOutput {
+    pub decoded_frames: usize,
+    decoded_frames_returned: usize,
+    // TODO: support multithreading by adding a mutex here?
+    frames: VecDeque<Frame>,
+
+    output_format: SurfaceFormat,
+    bpp: i32,
+    video_info: String,
+
+    /// output dimensions
+    width: u32,
+    luma_height: u32,
+    chroma_height: u32,
+    num_chroma_planes: u32,
+}
+
+impl DecodingOutput {
+    pub fn new() -> Self {
+        Self {
+            decoded_frames: 0,
+            decoded_frames_returned: 0,
+            frames: VecDeque::new(),
+
+            output_format: SurfaceFormat::NV12,
+            bpp: 1,
+            video_info: "".to_string(),
+
+            width: 0,
+            luma_height: 0,
+            chroma_height: 0,
+            num_chroma_planes: 0,
+        }
     }
 
     pub fn get_frame(&mut self) -> Option<&Frame> {
@@ -799,41 +836,18 @@ impl Decoder {
     pub fn get_output_format(&self) -> SurfaceFormat {
         self.output_format
     }
+}
 
-    fn sync_to_nv_decoder(&self) {
-        // SAFETY: We are the sole owner of `self.nv_decoder` and we guarantee it is valid for the
-        // lifetime of `Self`.
-        let mut nv_decoder = unsafe { Box::from_raw(self.nv_decoder) };
-
-        nv_decoder.decoded_frames = 0;
-        nv_decoder.stream = std::ptr::null_mut();
-        // TODO: write more fields
-
-        forget(nv_decoder);
-    }
-
-    fn sync_from_nv_decoder(&mut self) {
-        // SAFETY: We are the sole owner of `self.nv_decoder` and we guarantee it is valid for the
-        // lifetime of `Self`.
-        let nv_decoder = unsafe { Box::from_raw(self.nv_decoder) };
-
-        self.decoded_frames = nv_decoder.decoded_frames;
-        self.frames = nv_decoder.frames.clone();
-        self.output_format = nv_decoder.output_format;
-        self.bpp = nv_decoder.bpp;
-        self.video_info = nv_decoder.video_info.clone();
-        self.width = nv_decoder.width;
-        self.luma_height = nv_decoder.luma_height;
-        self.chroma_height = nv_decoder.chroma_height;
-        self.num_chroma_planes = nv_decoder.num_chroma_planes;
-
-        forget(nv_decoder);
+impl Default for DecodingOutput {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl Drop for Decoder {
     fn drop(&mut self) {
-        let session_deinit_start = Instant::now();
+        let instant = Instant::now();
+
         if !self.parser.is_null() {
             unsafe {
                 let err = cuvidDestroyVideoParser(self.parser as ffi::CUvideoparser);
@@ -841,11 +855,6 @@ impl Drop for Decoder {
             }
         }
 
-        // SAFETY: We are the sole owner of `self.nv_decoder` and we guarantee it is valid for the
-        // lifetime of `Self`.
-        let nv_decoder = unsafe { Box::from_raw(self.nv_decoder) };
-        drop(nv_decoder);
-
-        println!("Session Deinitialization Time: {:?}", session_deinit_start.elapsed());
+        println!("Decoder::drop() duration: {:?}", instant.elapsed());
     }
 }

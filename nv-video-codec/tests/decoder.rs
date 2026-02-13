@@ -7,7 +7,7 @@ extern crate simple_logger;
 mod utils;
 
 use anyhow::Result;
-use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
+use nv_video_codec::decoder::{DecoderPacketFlags, DecodingOutput, NvDecoder};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -51,24 +51,30 @@ fn run_basic_decode(
         .build()?;
 
     let start = std::time::Instant::now();
-    let mut frames_decoded = 0;
+    let mut decoding_output = DecodingOutput::new();
     let mut i = 0;
-    while i < DECODE_TRIES && frames_decoded == 0 {
-        frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
+
+    while i < DECODE_TRIES && decoding_output.decoded_frames == 0 {
+        decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
         i += 1;
     }
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
-        decoder.get_width(),
-        decoder.get_height()
+        decoding_output.get_width(),
+        decoding_output.get_height()
     );
-    assert!(decoder.get_width() == expected_width);
-    assert!(decoder.get_height() == expected_height);
-    info_ctx!(test_name, "frames decoded: {}, in {:?}", frames_decoded, start.elapsed(),);
-    assert!(!decoder.get_video_info().is_empty());
-    assert!(frames_decoded > 0);
-    let frame = decoder.get_frame().unwrap();
+    assert!(decoding_output.get_width() == expected_width);
+    assert!(decoding_output.get_height() == expected_height);
+    info_ctx!(
+        test_name,
+        "frames decoded: {}, in {:?}",
+        decoding_output.decoded_frames,
+        start.elapsed(),
+    );
+    assert!(!decoding_output.get_video_info().is_empty());
+    assert!(decoding_output.decoded_frames > 0);
+    let frame = decoding_output.get_frame().unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
     assert!(!frame.data.as_ref().is_empty());
 
