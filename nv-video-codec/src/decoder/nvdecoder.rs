@@ -51,6 +51,8 @@ pub struct NvDecoder {
     decoded_frames: usize,
     allocated_frames: usize,
     stream: CUstream,
+    // TODO(mbernat): `Frame` can contain pointers into the CUDA device memory. We need to guarantee
+    // they are valid by tying them to the `Decoder` lifetime when producing a `DecodingOutput`.
     frames: VecDeque<Frame>,
     picture_decode_index_mapping: [usize; 32],
     decoded_pictures: usize,
@@ -470,9 +472,6 @@ impl NvDecoder {
                 }
             }
             let frame_len = self.frames.len();
-            // WARNING: This is a potential data race, as the mutex is unlocked when
-            // decoded_frame_ptr is being worked with. This is present in the original code, so we copy that here
-            // TODO(efyang) fix!
             decoded_frame_ptr = self.frames[frame_len - 1].data.as_mut().as_mut_ptr();
         }
 
@@ -624,6 +623,8 @@ impl Drop for NvDecoder {
         for frame in self.frames.iter_mut() {
             if self.use_device_frame {
                 unsafe {
+                    // TODO(mbernat): frame.data already contains a `CUdeviceptr`, there should be
+                    // no need for this roundtrip.
                     cuMemFree_v2(frame.data.as_mut().as_mut_ptr() as CUdeviceptr)
                         .into_cuda_result()
                         .expect("Failure on nvdecoder frame free");
@@ -762,7 +763,6 @@ impl Drop for Decoder {
 pub struct DecodingOutput {
     pub decoded_frames: usize,
     decoded_frames_returned: usize,
-    // TODO: support multithreading by adding a mutex here?
     frames: VecDeque<Frame>,
     pub frame_info: FrameInfo,
 }

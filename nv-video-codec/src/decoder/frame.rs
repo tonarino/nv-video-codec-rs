@@ -6,11 +6,31 @@ pub struct Frame {
     pub data: FrameData,
 }
 
+// TODO(mbernat): Add a version of this struct that contains references rather than pointers.
+// That version should be returned by `Decoder::decode()` to guarantee frame validity.
 #[derive(Clone)]
 pub enum FrameData {
     Owned(Vec<u8>),
     Device(DeviceSlice),
     // DevicePitched(&'a [u8]),
+}
+
+impl AsMut<[u8]> for FrameData {
+    fn as_mut(&mut self) -> &mut [u8] {
+        match self {
+            Self::Owned(v) => v,
+            Self::Device(s) => unsafe { std::slice::from_raw_parts_mut(s.ptr as *mut u8, s.size) },
+        }
+    }
+}
+
+impl AsRef<[u8]> for FrameData {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Owned(v) => v,
+            Self::Device(s) => unsafe { std::slice::from_raw_parts(s.ptr as *mut u8, s.size) },
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -22,33 +42,5 @@ pub struct DeviceSlice {
 impl DeviceSlice {
     pub fn new(ptr: CUdeviceptr, size: usize) -> Self {
         Self { ptr, size }
-    }
-}
-
-impl AsMut<[u8]> for FrameData {
-    fn as_mut(&mut self) -> &mut [u8] {
-        match self {
-            Self::Owned(v) => v,
-            Self::Device(s) => {
-                // TODO(mbernat): I have no idea why we are trying to interpret device slices as
-                // Rust slices, these are different address spaces, so this the Rust slice is at
-                // best meaningless, at worst a UB.
-                unsafe { std::slice::from_raw_parts_mut(s.ptr as *mut u8, s.size) }
-            },
-        }
-    }
-}
-
-impl AsRef<[u8]> for FrameData {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Owned(v) => v,
-            Self::Device(s) => {
-                // TODO(mbernat): I have no idea why we are trying to interpret device slices as
-                // Rust slices, these are different address spaces, so this the Rust slice is at
-                // best meaningless, at worst a UB.
-                unsafe { std::slice::from_raw_parts_mut(s.ptr as *mut u8, s.size) }
-            },
-        }
     }
 }
