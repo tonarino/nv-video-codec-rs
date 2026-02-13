@@ -46,7 +46,7 @@ fn run_basic_decode(
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
+    let decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
         .use_device_frame(use_device_frame)
         .build()?;
 
@@ -58,21 +58,24 @@ fn run_basic_decode(
         decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
         i += 1;
     }
+
+    let frame_info = &decoding_output.frame_info;
+
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
-        decoding_output.get_width(),
-        decoding_output.get_height()
+        frame_info.get_width(),
+        frame_info.get_height()
     );
-    assert!(decoding_output.get_width() == expected_width);
-    assert!(decoding_output.get_height() == expected_height);
+    assert!(frame_info.get_width() == expected_width);
+    assert!(frame_info.get_height() == expected_height);
     info_ctx!(
         test_name,
         "frames decoded: {}, in {:?}",
         decoding_output.decoded_frames,
         start.elapsed(),
     );
-    assert!(!decoding_output.get_video_info().is_empty());
+    assert!(!frame_info.get_video_info().is_empty());
     assert!(decoding_output.decoded_frames > 0);
     let frame = decoding_output.get_frame().unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
