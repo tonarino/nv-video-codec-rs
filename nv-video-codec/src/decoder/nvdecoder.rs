@@ -21,7 +21,7 @@ use ffi::{
 use nv_video_codec_sys as ffi;
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
-    cell::UnsafeCell,
+    cell::RefCell,
     collections::VecDeque,
     convert::TryInto,
     os::raw::{c_int, c_ulong, c_void},
@@ -65,20 +65,15 @@ pub struct NvDecoder {
     frame_info: FrameInfo,
 }
 
-/// SAFETY: `decoder` is owned by a `Decoder` instance that guarantees it is valid for the
-/// duration of its lifetime and, in particular, while `cuvidParseVideoData()` is being invoked.
-/// This data is also available as `Decoder::nv_decoder` and we guarantee that for the duration
-/// of parsing this data is not accessed from elsewhere.
-struct _CallbackSafety;
-
 /// decoder refers to an NvDecoder
 /// Callback function to be registered for getting a callback when decoding of sequence starts
 unsafe extern "C" fn handle_video_sequence_proc(
     decoder: *mut c_void,
     video_format: *mut CUVIDEOFORMAT,
 ) -> c_int {
-    // SAFETY: See `_CallbackSafety`.
-    let decoder = unsafe { &mut *(decoder as *mut NvDecoder) };
+    // SAFETY: TODO
+    let decoder = unsafe { &*(decoder as *mut RefCell<NvDecoder>) };
+    let mut decoder = decoder.borrow_mut();
     decoder.handle_video_sequence(video_format)
 }
 
@@ -88,8 +83,9 @@ unsafe extern "C" fn handle_picture_decode_proc(
     decoder: *mut c_void,
     pic_params: *mut CUVIDPICPARAMS,
 ) -> c_int {
-    // SAFETY: See `_CallbackSafety`.
-    let decoder = unsafe { &mut *(decoder as *mut NvDecoder) };
+    // SAFETY: See the SAFETY comment in `handle_video_sequence_proc`.
+    let decoder = unsafe { &*(decoder as *mut RefCell<NvDecoder>) };
+    let mut decoder = decoder.borrow_mut();
     decoder.handle_picture_decode(pic_params)
 }
 
@@ -99,8 +95,9 @@ unsafe extern "C" fn handle_picture_display_proc(
     decoder: *mut c_void,
     disp_info: *mut CUVIDPARSERDISPINFO,
 ) -> c_int {
-    // SAFETY: See `_CallbackSafety`.
-    let decoder = unsafe { &mut *(decoder as *mut NvDecoder) };
+    // SAFETY: See the SAFETY comment in `handle_video_sequence_proc`.
+    let decoder = unsafe { &*(decoder as *mut RefCell<NvDecoder>) };
+    let mut decoder = decoder.borrow_mut();
     decoder.handle_picture_display(disp_info)
 }
 
@@ -110,8 +107,9 @@ unsafe extern "C" fn handle_operating_point_proc(
     decoder: *mut c_void,
     op_info: *mut CUVIDOPERATINGPOINTINFO,
 ) -> c_int {
-    // SAFETY: See `_CallbackSafety`.
-    let decoder = unsafe { &mut *(decoder as *mut NvDecoder) };
+    // SAFETY: See the SAFETY comment in `handle_video_sequence_proc`.
+    let decoder = unsafe { &*(decoder as *mut RefCell<NvDecoder>) };
+    let mut decoder = decoder.borrow_mut();
     decoder.handle_operating_point(op_info)
 }
 
@@ -643,9 +641,7 @@ impl Drop for NvDecoder {
 }
 pub struct Decoder {
     parser: CUvideoparser,
-    // `parser` holds a pointer to `nv_decoder` and mutably borrows it during parsing, so we need to
-    // drop the aliasing guarantees with `UnsafeCell`.
-    nv_decoder: UnsafeCell<Box<NvDecoder>>,
+    nv_decoder: Box<RefCell<NvDecoder>>,
 }
 
 impl Decoder {
@@ -654,9 +650,8 @@ impl Decoder {
         let clock_rate = builder.clock_rate;
         let low_latency = builder.low_latency;
 
-        let mut nv_decoder_box = Box::new(NvDecoder::new(builder)?);
-        let nv_decoder_ptr: *mut NvDecoder = &raw mut *nv_decoder_box;
-        let nv_decoder = UnsafeCell::new(nv_decoder_box);
+        let mut nv_decoder = Box::new(RefCell::new(NvDecoder::new(builder)?));
+        let nv_decoder_ptr: *mut RefCell<NvDecoder> = &raw mut *nv_decoder;
 
         // TODO: handle errors
         let mut params = CUVIDPARSERPARAMS {
@@ -723,18 +718,14 @@ impl Decoder {
     }
 
     fn prepare_nv_decoder(&self) {
-        // SAFETY: `self.nv_decoder` is valid for the duration of `Self` and is only accessed by
-        // private methods and `cuvidParseVideoData` in turns, so there is no aliasing.
-        let nv_decoder = unsafe { &mut *self.nv_decoder.get() };
+        let mut nv_decoder = self.nv_decoder.borrow_mut();
 
         nv_decoder.decoded_frames = 0;
         nv_decoder.stream = std::ptr::null_mut();
     }
 
     fn get_nv_decoder_output(&self) -> DecodingOutput {
-        // SAFETY: `self.nv_decoder` is valid for the duration of `Self` and is only accessed by
-        // private methods and `cuvidParseVideoData` in turns, so there is no aliasing.
-        let nv_decoder = unsafe { &*self.nv_decoder.get() };
+        let nv_decoder = self.nv_decoder.borrow();
 
         DecodingOutput {
             decoded_frames: nv_decoder.decoded_frames,
