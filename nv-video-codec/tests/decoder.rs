@@ -60,13 +60,13 @@ fn run_basic_decode(
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
-        decoder.get_width(),
-        decoder.get_height()
+        decoder.frame_info().width(),
+        decoder.frame_info().height()
     );
-    assert!(decoder.get_width() == expected_width);
-    assert!(decoder.get_height() == expected_height);
+    assert!(decoder.frame_info().width() == expected_width);
+    assert!(decoder.frame_info().height() == expected_height);
     info_ctx!(test_name, "frames decoded: {}, in {:?}", frames_decoded, start.elapsed(),);
-    assert!(!decoder.get_video_info().is_empty());
+    assert!(!decoder.frame_info().video_info().is_empty());
     assert!(frames_decoded > 0);
     let frame = decoder.get_frame().unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
