@@ -51,24 +51,32 @@ fn run_basic_decode(
         .build()?;
 
     let start = std::time::Instant::now();
-    let mut frames_decoded = 0;
+    let mut decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
     let mut i = 0;
-    while i < DECODE_TRIES && frames_decoded == 0 {
-        frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
+    // TODO(mbernat): This loop is very random, try to understand it better.
+    // It has something to do with the latency settings and the decoding output for the current
+    // packet only being available in the later `decode()` calls.
+    while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+        decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
         i += 1;
     }
+    let frame_info = &decoding_output.frame_info;
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
-        decoder.frame_info().width(),
-        decoder.frame_info().height()
+        frame_info.width(),
+        frame_info.height()
     );
-    assert!(decoder.frame_info().width() == expected_width);
-    assert!(decoder.frame_info().height() == expected_height);
-    info_ctx!(test_name, "frames decoded: {}, in {:?}", frames_decoded, start.elapsed(),);
-    assert!(!decoder.frame_info().video_info().is_empty());
-    assert!(frames_decoded > 0);
-    let frame = decoder.get_frame().unwrap();
+    assert!(frame_info.width() == expected_width);
+    assert!(frame_info.height() == expected_height);
+    info_ctx!(
+        test_name,
+        "frames decoded: {}, in {:?}",
+        decoding_output.frames.len(),
+        start.elapsed(),
+    );
+    assert!(!frame_info.video_info().is_empty());
+    let frame = decoding_output.frames.pop_front().unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
     assert!(!frame.data.as_ref().is_empty());
 

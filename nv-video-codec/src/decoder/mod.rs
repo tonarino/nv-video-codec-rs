@@ -1,4 +1,5 @@
 pub mod builder;
+pub mod decoding_output;
 pub mod error;
 pub mod flags;
 pub mod frame;
@@ -8,6 +9,7 @@ pub mod types;
 pub mod videoformat;
 
 pub use builder::*;
+pub use decoding_output::*;
 pub use error::*;
 pub use flags::*;
 pub use frame::*;
