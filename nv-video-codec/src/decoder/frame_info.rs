@@ -3,15 +3,16 @@ use crate::decoder::types::SurfaceFormat;
 // Frame format and dimensions
 #[derive(Clone)]
 pub struct FrameInfo {
-    pub output_format: SurfaceFormat,
-    pub video_info: String,
-    pub(super) bpp: i32,
+    output_format: SurfaceFormat,
+    bpp: i32,
 
     /// output dimensions
-    pub(super) width: u32,
-    pub(super) luma_height: u32,
-    pub(super) chroma_height: u32,
-    pub(super) num_chroma_planes: u32,
+    width: u32,
+    luma_height: u32,
+    chroma_height: u32,
+    num_chroma_planes: u32,
+
+    video_info: String,
 }
 
 impl FrameInfo {
@@ -19,9 +20,9 @@ impl FrameInfo {
     pub fn new(
         output_format: SurfaceFormat,
         bpp: i32,
-        video_info: String,
         width: u32,
         luma_height: u32,
+        video_info: String,
     ) -> Self {
         assert!(width != 0);
         assert!(luma_height != 0);
@@ -33,16 +34,21 @@ impl FrameInfo {
         Self {
             output_format,
             bpp,
-            video_info,
 
             width,
             luma_height,
             chroma_height,
             num_chroma_planes,
+
+            video_info,
         }
     }
 
-    pub fn get_width(&self) -> u32 {
+    pub fn bpp(&self) -> i32 {
+        self.bpp
+    }
+
+    pub fn width(&self) -> u32 {
         if self.width % 2 == 1
             && matches!(self.output_format, SurfaceFormat::NV12 | SurfaceFormat::P016)
         {
@@ -53,12 +59,28 @@ impl FrameInfo {
         }
     }
 
-    pub fn get_height(&self) -> u32 {
+    pub fn height(&self) -> u32 {
         self.luma_height
     }
 
-    pub fn get_frame_size(&self) -> u32 {
-        self.get_width()
+    pub fn luma_height(&self) -> u32 {
+        self.luma_height
+    }
+
+    pub fn chroma_height(&self) -> u32 {
+        self.chroma_height
+    }
+
+    pub fn num_chroma_planes(&self) -> u32 {
+        self.num_chroma_planes
+    }
+
+    pub fn video_info(&self) -> &str {
+        &self.video_info
+    }
+
+    pub fn frame_size(&self) -> u32 {
+        self.width()
             * (self.luma_height + self.chroma_height * self.num_chroma_planes)
             * self.bpp as u32
     }

@@ -312,7 +312,7 @@ impl<'a> NvDecoder<'a> {
             });
         }
 
-        self.frame_info = Some(FrameInfo::new(output_format, bpp, video_info, width, luma_height));
+        self.frame_info = Some(FrameInfo::new(output_format, bpp, width, luma_height, video_info));
 
         println!("Session Initialization Time: {:?}", session_init_start.elapsed());
 
@@ -427,9 +427,9 @@ impl<'a> NvDecoder<'a> {
                             cuMemAllocPitch_v2(
                                 &mut frame_data_device_ptr,
                                 &mut self.device_frame_pitch,
-                                (frame_info.get_width() * frame_info.bpp as u32) as usize,
-                                (frame_info.luma_height
-                                    + frame_info.chroma_height * frame_info.num_chroma_planes)
+                                (frame_info.width() * frame_info.bpp() as u32) as usize,
+                                (frame_info.luma_height()
+                                    + frame_info.chroma_height() * frame_info.num_chroma_planes())
                                     as usize,
                                 16,
                             )
@@ -441,7 +441,7 @@ impl<'a> NvDecoder<'a> {
                         unsafe {
                             cuMemAlloc_v2(
                                 &mut frame_data_device_ptr,
-                                frame_info.get_frame_size() as usize,
+                                frame_info.frame_size() as usize,
                             )
                             .into_cuda_result()
                             .unwrap();
@@ -450,7 +450,7 @@ impl<'a> NvDecoder<'a> {
                     unsafe {
                         frame_data = std::slice::from_raw_parts_mut(
                             frame_data_device_ptr as *mut u8,
-                            frame_info.get_frame_size() as usize,
+                            frame_info.frame_size() as usize,
                         );
                     }
                     frames.push_back(Frame {
@@ -458,7 +458,7 @@ impl<'a> NvDecoder<'a> {
                         data: FrameData::Device(frame_data),
                     })
                 } else {
-                    let frame_data = vec![0; frame_info.get_frame_size() as usize];
+                    let frame_data = vec![0; frame_info.frame_size() as usize];
                     frames.push_back(Frame {
                         timestamp: disp_info.timestamp,
                         data: FrameData::Owned(frame_data),
@@ -488,10 +488,10 @@ impl<'a> NvDecoder<'a> {
             dstPitch: if self.device_frame_pitch != 0 {
                 self.device_frame_pitch
             } else {
-                (frame_info.get_width() * frame_info.bpp as u32) as usize
+                (frame_info.width() * frame_info.bpp() as u32) as usize
             },
-            WidthInBytes: (frame_info.get_width() * frame_info.bpp as u32) as usize,
-            Height: frame_info.luma_height as usize,
+            WidthInBytes: (frame_info.width() * frame_info.bpp() as u32) as usize,
+            Height: frame_info.luma_height() as usize,
             ..Default::default()
         };
         unsafe {
@@ -503,22 +503,22 @@ impl<'a> NvDecoder<'a> {
         m.srcDevice =
             (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1))) as CUdeviceptr;
         m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
-            + (m.dstPitch as u64 * frame_info.luma_height as u64))
+            + (m.dstPitch as u64 * frame_info.luma_height() as u64))
             as *mut c_void;
         m.dstDevice = m.dstHost as CUdeviceptr;
-        m.Height = frame_info.chroma_height as usize;
+        m.Height = frame_info.chroma_height() as usize;
         unsafe {
             cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
         }
 
-        if frame_info.num_chroma_planes == 2 {
+        if frame_info.num_chroma_planes() == 2 {
             m.srcDevice = (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1) * 2))
                 as CUdeviceptr;
             m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
-                + (m.dstPitch as u64 * frame_info.luma_height as u64 * 2))
+                + (m.dstPitch as u64 * frame_info.luma_height() as u64 * 2))
                 as *mut c_void;
             m.dstDevice = m.dstHost as CUdeviceptr;
-            m.Height = frame_info.chroma_height as usize;
+            m.Height = frame_info.chroma_height() as usize;
             unsafe {
                 cuMemcpy2DAsync_v2(&m, self.stream).into_cuda_result().unwrap();
             }
