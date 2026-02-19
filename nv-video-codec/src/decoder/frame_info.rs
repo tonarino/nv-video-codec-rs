@@ -15,21 +15,34 @@ pub struct FrameInfo {
 }
 
 impl FrameInfo {
-    pub fn new() -> Self {
-        Self {
-            output_format: SurfaceFormat::NV12,
-            bpp: 1,
-            video_info: "".to_string(),
+    /// Panics when the `width` or the `luma_height` is 0.
+    pub fn new(
+        output_format: SurfaceFormat,
+        bpp: i32,
+        video_info: String,
+        width: u32,
+        luma_height: u32,
+    ) -> Self {
+        assert!(width != 0);
+        assert!(luma_height != 0);
 
-            width: 0,
-            luma_height: 0,
-            chroma_height: 0,
-            num_chroma_planes: 0,
+        let chroma_height =
+            f64::ceil(luma_height as f64 * output_format.chroma_height_factor()) as u32;
+        let num_chroma_planes = output_format.chroma_plane_count() as u32;
+
+        Self {
+            output_format,
+            bpp,
+            video_info,
+
+            width,
+            luma_height,
+            chroma_height,
+            num_chroma_planes,
         }
     }
 
     pub fn get_width(&self) -> u32 {
-        assert!(self.width != 0);
         if self.width % 2 == 1
             && matches!(self.output_format, SurfaceFormat::NV12 | SurfaceFormat::P016)
         {
@@ -41,20 +54,12 @@ impl FrameInfo {
     }
 
     pub fn get_height(&self) -> u32 {
-        assert!(self.luma_height != 0);
         self.luma_height
     }
 
     pub fn get_frame_size(&self) -> u32 {
-        assert!(self.width != 0);
         self.get_width()
             * (self.luma_height + self.chroma_height * self.num_chroma_planes)
             * self.bpp as u32
-    }
-}
-
-impl Default for FrameInfo {
-    fn default() -> Self {
-        Self::new()
     }
 }
