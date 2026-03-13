@@ -4,13 +4,12 @@ use super::{
     types::{Codec, Dim, Rect},
     NvDecoder, NvDecoderError,
 };
+use crate::decoder::FrameAllocator;
 
 pub struct NvDecoderBuilder {
     pub(super) context: Context,
-    pub(super) use_device_frame: bool,
     pub(super) codec: Codec,
     pub(super) low_latency: bool,
-    pub(super) device_frame_pitched: bool,
     pub(super) crop_rect: Rect,
     pub(super) resize_dim: Dim,
     pub(super) max_width: u32,
@@ -19,11 +18,7 @@ pub struct NvDecoderBuilder {
 }
 
 impl NvDecoderBuilder {
-    builder_field_setter!(use_device_frame: bool);
-
     builder_field_setter!(low_latency: bool);
-
-    builder_field_setter!(device_frame_pitched: bool);
 
     builder_field_setter!(crop_rect: Rect);
 
@@ -38,10 +33,8 @@ impl NvDecoderBuilder {
     pub fn new(context: Context, codec: Codec) -> Self {
         Self {
             context,
-            use_device_frame: false,
             codec,
             low_latency: false,
-            device_frame_pitched: false,
             crop_rect: Default::default(),
             resize_dim: Default::default(),
             max_width: 0,
@@ -50,7 +43,7 @@ impl NvDecoderBuilder {
         }
     }
 
-    pub fn build<'a>(self) -> Result<Box<NvDecoder<'a>>, NvDecoderError> {
+    pub fn build<A: FrameAllocator>(self) -> Result<Box<NvDecoder<A>>, NvDecoderError> {
         NvDecoder::new(self)
     }
 }
