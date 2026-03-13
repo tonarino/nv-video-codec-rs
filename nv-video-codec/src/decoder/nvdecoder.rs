@@ -1,7 +1,9 @@
 use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat};
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, RawBuffer, RawFrame},
+    decoder::{
+        DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, RawBuffer as _, RawFrame,
+    },
 };
 use ffi::{
     cuMemcpy2DAsync_v2, cuStreamSynchronize, cudaVideoCreateFlags_enum, cuvidCreateDecoder,
