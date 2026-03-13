@@ -105,48 +105,48 @@ impl FrameAllocator for PitchedDeviceFrameAllocator {
 }
 
 pub trait RawBuffer {
-    type Annotated<'a>;
+    type AnnotatedBuffer<'a>;
 
     fn as_mut_ptr(&mut self) -> *mut u8;
 
     /// # Safety
     ///
-    /// Self::Annotated<'a> must be valid for 'a.
-    unsafe fn into_annotated<'a>(self) -> Self::Annotated<'a>;
+    /// Self::AnnotatedBuffer<'a> must be valid for 'a.
+    unsafe fn into_annotated<'a>(self) -> Self::AnnotatedBuffer<'a>;
 
-    fn from_annotated<'a>(foo: Self::Annotated<'a>) -> Self;
+    fn from_annotated<'a>(annotated: Self::AnnotatedBuffer<'a>) -> Self;
 }
 
 impl RawBuffer for Vec<u8> {
-    type Annotated<'a> = Vec<u8>;
+    type AnnotatedBuffer<'a> = Vec<u8>;
 
     fn as_mut_ptr(&mut self) -> *mut u8 {
         Vec::as_mut_ptr(self)
     }
 
-    unsafe fn into_annotated<'a>(self) -> Self::Annotated<'a> {
+    unsafe fn into_annotated<'a>(self) -> Self::AnnotatedBuffer<'a> {
         self
     }
 
-    fn from_annotated<'a>(annotated: Self::Annotated<'a>) -> Self {
+    fn from_annotated<'a>(annotated: Self::AnnotatedBuffer<'a>) -> Self {
         annotated
     }
 }
 
 impl RawBuffer for RawDeviceSlice {
-    type Annotated<'a> = DeviceSlice<'a>;
+    type AnnotatedBuffer<'a> = DeviceSlice<'a>;
 
     fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }
 
-    unsafe fn into_annotated<'a>(self) -> Self::Annotated<'a> {
-        // SAFETY: `into_annotated` caller guarantees the slice is valid for 'a.
+    unsafe fn into_annotated<'a>(self) -> Self::AnnotatedBuffer<'a> {
+        // SAFETY: `into_annotated` caller guarantees the device slice is valid for `'a`.
         unsafe { self.into_device_slice() }
     }
 
-    fn from_annotated<'a>(slice: Self::Annotated<'a>) -> Self {
-        Self::from_device_slice(slice)
+    fn from_annotated<'a>(slice: Self::AnnotatedBuffer<'a>) -> Self {
+        slice.into_raw_device_slice()
     }
 }
 
@@ -158,7 +158,7 @@ pub struct RawFrame<A: FrameAllocator> {
 impl<A: FrameAllocator> RawFrame<A> {
     /// # Safety
     ///
-    /// self is valid for 'a.
+    /// Memory backed by `self` has to be valid for `'a`.
     pub unsafe fn from_raw_parts<'a>(self) -> Frame<'a, A> {
         // SAFETY: Caller guarantees self.data lives for 'a.
         let data = unsafe { self.data.into_annotated() };
@@ -175,10 +175,10 @@ impl<A: FrameAllocator> RawFrame<A> {
 
 pub struct Frame<'a, A: FrameAllocator> {
     pub timestamp: i64,
-    pub data: <A::Buffer as RawBuffer>::Annotated<'a>,
+    pub data: <A::Buffer as RawBuffer>::AnnotatedBuffer<'a>,
 }
 
-/// A GPU device slice guaranteed to be valid for `'a`.
+/// A slice of GPU device memory guaranteed to be valid for `'a`.
 pub struct DeviceSlice<'a> {
     ptr: *mut u8,
     len: usize,
@@ -186,19 +186,8 @@ pub struct DeviceSlice<'a> {
 }
 
 impl<'a> DeviceSlice<'a> {
-    /// # Safety
-    ///
-    /// The caller guarantees that the slice is valid for `'a`.
-    pub unsafe fn new(ptr: *mut u8, len: usize) -> Self {
-        Self { ptr, len, _phantom_data: PhantomData }
-    }
-
-    pub fn as_ptr(&self) -> *const u8 {
-        self.ptr
-    }
-
-    pub fn as_mut_ptr(&self) -> *mut u8 {
-        self.ptr
+    fn into_raw_device_slice(self) -> RawDeviceSlice {
+        RawDeviceSlice { ptr: self.ptr, len: self.len }
     }
 }
 
@@ -208,12 +197,10 @@ pub struct RawDeviceSlice {
 }
 
 impl RawDeviceSlice {
-    // Safety: DeviceSlice has to be valid for 'a.
+    /// # Safety
+    ///
+    /// Device memory backed by `self` has to be valid for `'a`.
     unsafe fn into_device_slice<'a>(self) -> DeviceSlice<'a> {
         DeviceSlice { ptr: self.ptr, len: self.len, _phantom_data: PhantomData }
-    }
-
-    fn from_device_slice<'a>(slice: DeviceSlice<'a>) -> Self {
-        RawDeviceSlice { ptr: slice.ptr, len: slice.len }
     }
 }
