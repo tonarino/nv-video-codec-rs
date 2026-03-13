@@ -1,7 +1,7 @@
 use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat};
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, Raw as _, RawFrame},
+    decoder::{DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, RawBuffer, RawFrame},
 };
 use ffi::{
     cuMemcpy2DAsync_v2, cuStreamSynchronize, cudaVideoCreateFlags_enum, cuvidCreateDecoder,
@@ -31,11 +31,9 @@ pub struct NvDecoder<A: FrameAllocator> {
     parser: CUvideoparser,
     decoder: CUvideodecoder,
     context: Context,
-    use_device_frame: bool,
     codec: Codec,
     chroma_format: ChromaFormat,
     video_format: CUVIDEOFORMAT,
-    device_frame_pitched: bool,
     crop_rect: Rect,
     resize_dim: Dim,
     max_width: u32,
@@ -114,10 +112,6 @@ where
 }
 
 impl<A: FrameAllocator> NvDecoder<A> {
-    pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
-        NvDecoderBuilder::new(context, codec)
-    }
-
     // TODO(efyang) : switch these over to result types and just handle the results
     // also potentially have special struct for each return type for these callbacks and translate them
     /* Return value from HandleVideoSequence() are interpreted as   :
@@ -430,11 +424,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
             srcDevice: src_frame,
             srcPitch: src_pitch as usize,
-            dstMemoryType: if self.use_device_frame {
-                CUmemorytype_enum::CU_MEMORYTYPE_DEVICE
-            } else {
-                CUmemorytype_enum::CU_MEMORYTYPE_HOST
-            },
+            dstMemoryType: A::memory_type(),
             dstHost: decoded_frame_ptr as *mut c_void,
             dstDevice: decoded_frame_ptr as CUdeviceptr,
             dstPitch: if self.device_frame_pitch != 0 {
@@ -534,9 +524,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         let mut this = Box::new(Self {
             parser: std::ptr::null_mut(),
             context: builder.context,
-            use_device_frame: builder.use_device_frame,
             codec: builder.codec,
-            device_frame_pitched: builder.device_frame_pitched,
             crop_rect: builder.crop_rect,
             resize_dim: builder.resize_dim,
             max_width: builder.max_width,
@@ -596,7 +584,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         packet_data: &[u8],
         packet_flags: DecoderPacketFlags,
         packet_timestamp: i64,
-    ) -> Result<DecodingOutput<'_>, NvDecoderError> {
+    ) -> Result<DecodingOutput<'_, A>, NvDecoderError> {
         self.decoded_frames = 0;
         self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = packet_flags.into();
@@ -621,37 +609,30 @@ impl<A: FrameAllocator> NvDecoder<A> {
         Ok(self.get_decoding_output())
     }
 
-    /// Note: the locked/unlocked api is like the following:
-    /// If a frame can be used by the decoder, then it is considered unlocked (anything inside of self.frames)
-    /// A frame is locked when it cannot be used by the decoder (it will be removed from the internal framebuffer)
-    /// In this way, one can return used frames to the decoder by unlocking them to avoid excessive memory allocations.
-    pub fn get_locked_frame(&mut self) -> Option<Frame> {
-        if self.decoded_frames > 0 {
-            let mut frames_locked = self.frames.lock();
-            self.decoded_frames -= 1;
-            frames_locked.pop_front()
-        } else {
-            None
-        }
-    }
-
-    pub fn unlock_frame(&mut self, mut frame: Frame) {
-        let mut frames_locked = self.frames.lock();
-        frame.timestamp = 0;
-        frames_locked.push_back(frame);
-    }
-
     pub fn set_reconfig_params() -> Result<(), NvDecoderError> {
         todo!()
     }
 
     /// Panics if [`Self::frame_info`] hasn't been initialized yet by successful parsing.
-    fn get_decoding_output(&self) -> DecodingOutput<'_> {
-        let frames = self.frames.lock().drain(0..).collect();
+    fn get_decoding_output<'a>(&'a mut self) -> DecodingOutput<'a, A> {
+        let frames = self
+            .frames
+            .lock()
+            .drain(0..)
+            .map(|raw| {
+                // SAFETY: The frames are backed by this decoder, so they outlive 'a.
+                unsafe { raw.from_raw_parts() }
+            })
+            .collect();
+
         let frame_info =
             self.frame_info.as_ref().expect("Frame info to be set by successful parsing.").clone();
 
-        DecodingOutput::new(frames, frame_info)
+        DecodingOutput::new(frames, frame_info, self)
+    }
+
+    pub fn reclaim_frames<'a, 'b>(&'b mut self, frames: impl Iterator<Item = Frame<'a, A>>) {
+        self.frames.lock().extend(frames.map(|frame| RawFrame::into_raw_parts(frame)));
     }
 }
 

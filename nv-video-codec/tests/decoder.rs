@@ -7,7 +7,7 @@ extern crate simple_logger;
 mod utils;
 
 use anyhow::Result;
-use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
+use nv_video_codec::decoder::{DecoderPacketFlags, HostFrameAllocator, NvDecoderBuilder};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -28,8 +28,8 @@ fn init_cuda_ctx() -> Result<Context> {
 #[test]
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
-    let decoder =
-        NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC).build()?;
+    let decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<HostFrameAllocator>()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -42,13 +42,11 @@ fn run_basic_decode(
     data: &[u8],
     expected_width: u32,
     expected_height: u32,
-    use_device_frame: bool,
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
-        .use_device_frame(use_device_frame)
-        .build()?;
+    let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<HostFrameAllocator>()?;
 
     let start = std::time::Instant::now();
     let packet_timestamp = -1;
@@ -60,8 +58,10 @@ fn run_basic_decode(
     // packet only being available in the later `decode()` calls.
     while i < DECODE_TRIES && decoding_output.frames.is_empty() {
         let packet_timestamp = i as i64;
+        drop(decoding_output);
         decoding_output =
             decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+
         i += 1;
     }
     let frame_info = &decoding_output.frame_info;
@@ -81,7 +81,7 @@ fn run_basic_decode(
     );
     assert!(!frame_info.video_info().is_empty());
     let frame = decoding_output.frames.pop_front().unwrap();
-    let frame_slice = frame.data.as_slice().unwrap();
+    let frame_slice = frame.data.as_slice();
     info_ctx!(test_name, "Got frame of size: {}", frame_slice.len());
     assert!(!frame_slice.is_empty());
 
@@ -96,21 +96,21 @@ fn run_basic_decode(
 #[test]
 fn decode_h265_720p_basic_grayscale() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_grayscale.hevc");
-    run_basic_decode("decode_h265_720p_basic_grayscale", data, 1280, 720, false)?;
+    run_basic_decode("decode_h265_720p_basic_grayscale", data, 1280, 720)?;
     Ok(())
 }
 
 #[test]
 fn decode_h265_720p_basic_color() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_color.hevc");
-    run_basic_decode("decode_h265_720p_basic_color", data, 1280, 720, false)?;
+    run_basic_decode("decode_h265_720p_basic_color", data, 1280, 720)?;
     Ok(())
 }
 
 #[test]
 fn decode_h265_3k_basic() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    let frame = run_basic_decode("decode_h265_3k_basic", data, 3088, 2076, false)?;
+    let frame = run_basic_decode("decode_h265_3k_basic", data, 3088, 2076)?;
     assert!(&frame[..10].iter().all(|&x| x == 173));
     Ok(())
 }
@@ -118,7 +118,7 @@ fn decode_h265_3k_basic() -> Result<()> {
 #[test]
 fn decode_h265_3k_device() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    let frame = run_basic_decode("decode_h265_3k_device", data, 3088, 2076, false)?;
+    let frame = run_basic_decode("decode_h265_3k_device", data, 3088, 2076)?;
     assert!(&frame[..10].iter().all(|&x| x == 173));
     Ok(())
 }
