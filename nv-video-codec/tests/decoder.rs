@@ -81,14 +81,15 @@ fn run_basic_decode(
     );
     assert!(!frame_info.video_info().is_empty());
     let frame = decoding_output.frames.pop_front().unwrap();
-    info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
-    assert!(!frame.data.as_ref().is_empty());
+    let frame_slice = frame.data.as_slice().unwrap();
+    info_ctx!(test_name, "Got frame of size: {}", frame_slice.len());
+    assert!(!frame_slice.is_empty());
 
     // NOTE: frames can be checked with https://rawpixels.net/
     // std::fs::write("decode_out_grayscale.nv12", &frame.data)?;
 
     let mut out_vec = Vec::new();
-    out_vec.extend_from_slice(frame.data.as_ref());
+    out_vec.extend_from_slice(frame_slice);
     Ok(out_vec)
 }
 

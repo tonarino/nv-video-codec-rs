@@ -1,18 +1,14 @@
-use super::{
-    types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
-    FrameData,
-};
+use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat};
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{DecodingOutput, FrameInfo, NvDecoderBuilder},
+    decoder::{DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, Raw as _, RawFrame},
 };
 use ffi::{
-    cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
-    cudaVideoCreateFlags_enum, cuvidCreateDecoder, cuvidCtxLockCreate, cuvidCtxLockDestroy,
-    cuvidDecodePicture, cuvidDecodeStatus_enum, cuvidDestroyDecoder, cuvidDestroyVideoParser,
-    cuvidGetDecodeStatus, cuvidGetDecoderCaps, cuvidMapVideoFrame64, cuvidParseVideoData,
-    cuvidUnmapVideoFrame64, CUdeviceptr, CUmemorytype_enum, CUstream, CUvideoctxlock,
-    CUvideodecoder,
+    cuMemcpy2DAsync_v2, cuStreamSynchronize, cudaVideoCreateFlags_enum, cuvidCreateDecoder,
+    cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture, cuvidDecodeStatus_enum,
+    cuvidDestroyDecoder, cuvidDestroyVideoParser, cuvidGetDecodeStatus, cuvidGetDecoderCaps,
+    cuvidMapVideoFrame64, cuvidParseVideoData, cuvidUnmapVideoFrame64, CUdeviceptr,
+    CUmemorytype_enum, CUstream, CUvideoctxlock, CUvideodecoder,
     CUvideopacketflags::{self, CUVID_PKT_ENDOFSTREAM, CUVID_PKT_TIMESTAMP},
     CUvideoparser, CUDA_MEMCPY2D, CUVIDDECODECAPS, CUVIDDECODECREATEINFO, CUVIDEOFORMAT,
     CUVIDGETDECODESTATUS, CUVIDOPERATINGPOINTINFO, CUVIDPARSERDISPINFO, CUVIDPARSERPARAMS,
@@ -31,7 +27,7 @@ use std::{
 
 use super::{DecoderPacketFlags, Frame, NvDecoderError};
 
-pub struct NvDecoder<'a> {
+pub struct NvDecoder<A: FrameAllocator> {
     parser: CUvideoparser,
     decoder: CUvideodecoder,
     context: Context,
@@ -55,7 +51,7 @@ pub struct NvDecoder<'a> {
     stream: CUstream,
     /// need mutex to cover callbacks
     // TODO(mbernat): Try to find out what this mutex is for
-    frames: Arc<Mutex<VecDeque<Frame<'a>>>>,
+    frames: Arc<Mutex<VecDeque<RawFrame<A>>>>,
     picture_decode_index_mapping: [usize; 32],
     decoded_pictures: usize,
     operating_point: usize,
@@ -69,42 +65,42 @@ pub struct NvDecoder<'a> {
 
 /// decoder refers to an NvDecoder
 /// Callback function to be registered for getting a callback when decoding of sequence starts
-unsafe extern "C" fn handle_video_sequence_proc(
+unsafe extern "C" fn handle_video_sequence_proc<A: FrameAllocator>(
     decoder: *mut c_void,
     video_format: *mut CUVIDEOFORMAT,
 ) -> c_int {
     debug_assert!(!decoder.is_null());
-    (decoder as *mut NvDecoder).as_mut().unwrap().handle_video_sequence(video_format)
+    (decoder as *mut NvDecoder<A>).as_mut().unwrap().handle_video_sequence(video_format)
 }
 
 /// decoder refers to an NvDecoder
 /// Callback function to be registered for getting a callback when a decoded frame is ready to be decoded
-unsafe extern "C" fn handle_picture_decode_proc(
+unsafe extern "C" fn handle_picture_decode_proc<A: FrameAllocator>(
     decoder: *mut c_void,
     pic_params: *mut CUVIDPICPARAMS,
 ) -> c_int {
     debug_assert!(!decoder.is_null());
-    (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_decode(pic_params)
+    (decoder as *mut NvDecoder<A>).as_mut().unwrap().handle_picture_decode(pic_params)
 }
 
 /// decoder refers to an NvDecoder
 /// Callback function to be registered for getting a callback when a decoded frame is available for display
-unsafe extern "C" fn handle_picture_display_proc(
+unsafe extern "C" fn handle_picture_display_proc<A: FrameAllocator>(
     decoder: *mut c_void,
     disp_info: *mut CUVIDPARSERDISPINFO,
 ) -> c_int {
     debug_assert!(!decoder.is_null());
-    (decoder as *mut NvDecoder).as_mut().unwrap().handle_picture_display(disp_info)
+    (decoder as *mut NvDecoder<A>).as_mut().unwrap().handle_picture_display(disp_info)
 }
 
 /// decoder refers to an NvDecoder
 /// Callback function to be registered for getting a callback to get operating point when AV1 SVC sequence header start.
-unsafe extern "C" fn handle_operating_point_proc(
+unsafe extern "C" fn handle_operating_point_proc<A: FrameAllocator>(
     decoder: *mut c_void,
     op_info: *mut CUVIDOPERATINGPOINTINFO,
 ) -> c_int {
     debug_assert!(!decoder.is_null());
-    (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
+    (decoder as *mut NvDecoder<A>).as_mut().unwrap().handle_operating_point(op_info)
 }
 
 fn do_within_context<F, T>(context: &Context, mut func: F)
@@ -117,7 +113,7 @@ where
     ContextStack::pop().unwrap();
 }
 
-impl<'a> NvDecoder<'a> {
+impl<A: FrameAllocator> NvDecoder<A> {
     pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
         NvDecoderBuilder::new(context, codec)
     }
@@ -343,7 +339,7 @@ impl<'a> NvDecoder<'a> {
     /* Return value from HandlePictureDisplay() are interpreted as:
      *  0: fail, >=1: succeeded
      */
-    fn handle_picture_display(&'a mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
+    fn handle_picture_display(&mut self, disp_info: *mut CUVIDPARSERDISPINFO) -> i32 {
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!disp_info.is_null());
         let disp_info = unsafe { *disp_info };
@@ -418,62 +414,14 @@ impl<'a> NvDecoder<'a> {
             if self.decoded_frames > frames.len() {
                 // Not enough frames in stock
                 self.allocated_frames += 1;
-                let frame_data: &mut [u8];
-                if self.use_device_frame {
-                    let mut frame_data_device_ptr: CUdeviceptr = 0;
-                    if self.device_frame_pitched {
-                        // TODO(efyang): this should be a specialized type, pitched allocation is not like a normal array
-                        // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
-                        unsafe {
-                            cuMemAllocPitch_v2(
-                                &mut frame_data_device_ptr,
-                                &mut self.device_frame_pitch,
-                                (frame_info.width() * frame_info.bpp() as u32) as usize,
-                                (frame_info.luma_height()
-                                    + frame_info.chroma_height() * frame_info.num_chroma_planes())
-                                    as usize,
-                                16,
-                            )
-                            .into_cuda_result()
-                            .unwrap();
-                        }
-                        todo!();
-                    } else {
-                        unsafe {
-                            cuMemAlloc_v2(
-                                &mut frame_data_device_ptr,
-                                frame_info.frame_size() as usize,
-                            )
-                            .into_cuda_result()
-                            .unwrap();
-                        }
-                    }
-                    unsafe {
-                        // TODO(mbernat): This is a UB, we're making a host slice from a pointer to
-                        // the device memory. There is no way we can guarantee this memory is valid
-                        // for an `&mut [u8]`.
-                        frame_data = std::slice::from_raw_parts_mut(
-                            frame_data_device_ptr as *mut u8,
-                            frame_info.frame_size() as usize,
-                        );
-                    }
-                    frames.push_back(Frame {
-                        timestamp: disp_info.timestamp,
-                        data: FrameData::Device(frame_data),
-                    })
-                } else {
-                    let frame_data = vec![0; frame_info.frame_size() as usize];
-                    frames.push_back(Frame {
-                        timestamp: disp_info.timestamp,
-                        data: FrameData::Owned(frame_data),
-                    })
-                }
+                let data = A::alloc(frame_info, &mut self.device_frame_pitch);
+                frames.push_back(RawFrame { timestamp: disp_info.timestamp, data });
             }
             let frame_len = frames.len();
             // WARNING: This is a potential data race, as the mutex is unlocked when
             // decoded_frame_ptr is being worked with. This is present in the original code, so we copy that here
             // TODO(efyang) fix!
-            decoded_frame_ptr = frames[frame_len - 1].data.as_mut().as_mut_ptr();
+            decoded_frame_ptr = frames[frame_len - 1].data.as_mut_ptr();
         }
 
         // NOTE: memcpys take about 1ms total here
@@ -620,11 +568,11 @@ impl<'a> NvDecoder<'a> {
             ulClockRate: builder.clock_rate,
             ulMaxDisplayDelay: if builder.low_latency { 0 } else { 1 },
 
-            pUserData: &mut *this as *mut NvDecoder as *mut c_void,
-            pfnSequenceCallback: Some(handle_video_sequence_proc),
-            pfnDecodePicture: Some(handle_picture_decode_proc),
-            pfnDisplayPicture: Some(handle_picture_display_proc),
-            pfnGetOperatingPoint: Some(handle_operating_point_proc),
+            pUserData: &mut *this as *mut NvDecoder<A> as *mut c_void,
+            pfnSequenceCallback: Some(handle_video_sequence_proc::<A>),
+            pfnDecodePicture: Some(handle_picture_decode_proc::<A>),
+            pfnDisplayPicture: Some(handle_picture_display_proc::<A>),
+            pfnGetOperatingPoint: Some(handle_operating_point_proc::<A>),
 
             // TODO: other stuff not mentioned: sane defaults?
             // most likely broken tbh
@@ -677,7 +625,7 @@ impl<'a> NvDecoder<'a> {
     /// If a frame can be used by the decoder, then it is considered unlocked (anything inside of self.frames)
     /// A frame is locked when it cannot be used by the decoder (it will be removed from the internal framebuffer)
     /// In this way, one can return used frames to the decoder by unlocking them to avoid excessive memory allocations.
-    pub fn get_locked_frame(&mut self) -> Option<Frame<'a>> {
+    pub fn get_locked_frame(&mut self) -> Option<Frame> {
         if self.decoded_frames > 0 {
             let mut frames_locked = self.frames.lock();
             self.decoded_frames -= 1;
@@ -687,7 +635,7 @@ impl<'a> NvDecoder<'a> {
         }
     }
 
-    pub fn unlock_frame(&mut self, mut frame: Frame<'a>) {
+    pub fn unlock_frame(&mut self, mut frame: Frame) {
         let mut frames_locked = self.frames.lock();
         frame.timestamp = 0;
         frames_locked.push_back(frame);
@@ -707,7 +655,7 @@ impl<'a> NvDecoder<'a> {
     }
 }
 
-impl<'a> Drop for NvDecoder<'a> {
+impl<A: FrameAllocator> Drop for NvDecoder<A> {
     fn drop(&mut self) {
         let session_deinit_start = Instant::now();
         if !self.parser.is_null() {
@@ -725,13 +673,7 @@ impl<'a> Drop for NvDecoder<'a> {
         }
 
         for frame in self.frames.lock().iter_mut() {
-            if self.use_device_frame {
-                unsafe {
-                    cuMemFree_v2(frame.data.as_mut().as_mut_ptr() as CUdeviceptr)
-                        .into_cuda_result()
-                        .expect("Failure on nvdecoder frame free");
-                }
-            }
+            A::free(&mut frame.data);
         }
 
         ContextStack::pop().unwrap();
