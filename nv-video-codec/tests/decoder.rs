@@ -51,13 +51,17 @@ fn run_basic_decode(
         .build()?;
 
     let start = std::time::Instant::now();
-    let mut decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
+    let packet_timestamp = -1;
+    let mut decoding_output =
+        decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
     let mut i = 0;
     // TODO(mbernat): This loop is very random, try to understand it better.
     // It has something to do with the latency settings and the decoding output for the current
     // packet only being available in the later `decode()` calls.
     while i < DECODE_TRIES && decoding_output.frames.is_empty() {
-        decoding_output = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, 0)?;
+        let packet_timestamp = i as i64;
+        decoding_output =
+            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
         i += 1;
     }
     let frame_info = &decoding_output.frame_info;

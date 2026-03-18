@@ -16,7 +16,7 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::encoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
-    guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO, _NV_ENC_PIC_FLAGS,
+    guids, _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
 };
 use simple_logger::SimpleLogger;
 

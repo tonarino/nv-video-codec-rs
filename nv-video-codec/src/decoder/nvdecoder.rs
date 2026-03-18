@@ -643,27 +643,23 @@ impl<'a> NvDecoder<'a> {
         Ok(this)
     }
 
-    /// Returns the number of frames decoded
-    ///
-    /// # Arguments
-    /// * arg
     pub fn decode(
         &mut self,
-        data: &[u8],
-        flags: DecoderPacketFlags,
-        timestamp: i64,
+        packet_data: &[u8],
+        packet_flags: DecoderPacketFlags,
+        packet_timestamp: i64,
     ) -> Result<DecodingOutput<'_>, NvDecoderError> {
         self.decoded_frames = 0;
         self.decoded_frames_returned = 0;
-        let flags: CUvideopacketflags::Type = flags.into();
+        let flags: CUvideopacketflags::Type = packet_flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
             flags: (flags as u32 | CUVID_PKT_TIMESTAMP) as c_ulong,
-            payload_size: data.len() as u64,
-            payload: data.as_ptr(),
-            timestamp,
+            payload_size: packet_data.len() as u64,
+            payload: packet_data.as_ptr(),
+            timestamp: packet_timestamp,
         };
 
-        if data.is_empty() {
+        if packet_data.is_empty() {
             packet.flags |= CUVID_PKT_ENDOFSTREAM as c_ulong;
         }
 
