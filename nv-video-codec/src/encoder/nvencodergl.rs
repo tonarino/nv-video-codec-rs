@@ -3,7 +3,7 @@ use super::{
     NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use nv_video_codec_sys::{
-    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS, _NV_ENC_DEVICE_TYPE,
+    _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
 };
 
 pub struct NvEncoderGL {
