@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{FrameInfo, NvDecoderBuilder},
+    decoder::{DecodingOutput, FrameInfo, NvDecoderBuilder},
 };
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
@@ -19,7 +19,7 @@ use ffi::{
     CUVIDPICPARAMS, CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET,
 };
 use nv_video_codec_sys as ffi;
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
+use parking_lot::Mutex;
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
     collections::VecDeque,
@@ -54,6 +54,7 @@ pub struct NvDecoder<'a> {
     allocated_frames: usize,
     stream: CUstream,
     /// need mutex to cover callbacks
+    // TODO(mbernat): Try to find out what this mutex is for
     frames: Arc<Mutex<VecDeque<Frame<'a>>>>,
     picture_decode_index_mapping: [usize; 32],
     decoded_pictures: usize,
@@ -448,6 +449,9 @@ impl<'a> NvDecoder<'a> {
                         }
                     }
                     unsafe {
+                        // TODO(mbernat): This is a UB, we're making a host slice from a pointer to
+                        // the device memory. There is no way we can guarantee this memory is valid
+                        // for an `&mut [u8]`.
                         frame_data = std::slice::from_raw_parts_mut(
                             frame_data_device_ptr as *mut u8,
                             frame_info.frame_size() as usize,
@@ -639,27 +643,23 @@ impl<'a> NvDecoder<'a> {
         Ok(this)
     }
 
-    /// Returns the number of frames decoded
-    ///
-    /// # Arguments
-    /// * arg
     pub fn decode(
         &mut self,
-        data: &[u8],
-        flags: DecoderPacketFlags,
-        timestamp: i64,
-    ) -> Result<usize, NvDecoderError> {
+        packet_data: &[u8],
+        packet_flags: DecoderPacketFlags,
+        packet_timestamp: i64,
+    ) -> Result<DecodingOutput<'_>, NvDecoderError> {
         self.decoded_frames = 0;
         self.decoded_frames_returned = 0;
-        let flags: CUvideopacketflags::Type = flags.into();
+        let flags: CUvideopacketflags::Type = packet_flags.into();
         let mut packet = CUVIDSOURCEDATAPACKET {
             flags: (flags as u32 | CUVID_PKT_TIMESTAMP) as c_ulong,
-            payload_size: data.len() as u64,
-            payload: data.as_ptr(),
-            timestamp,
+            payload_size: packet_data.len() as u64,
+            payload: packet_data.as_ptr(),
+            timestamp: packet_timestamp,
         };
 
-        if data.is_empty() {
+        if packet_data.is_empty() {
             packet.flags |= CUVID_PKT_ENDOFSTREAM as c_ulong;
         }
 
@@ -670,22 +670,7 @@ impl<'a> NvDecoder<'a> {
 
         self.stream = std::ptr::null_mut();
 
-        Ok(self.decoded_frames)
-    }
-
-    // Another possible race condition in the original code here
-    // should be solved with the use of the mutexguard
-    pub fn get_frame(&mut self) -> Option<MappedMutexGuard<'_, Frame<'a>>> {
-        if self.decoded_frames > 0 {
-            let frames_locked = self.frames.lock();
-            self.decoded_frames -= 1;
-            self.decoded_frames_returned += 1;
-            Some(MutexGuard::map(frames_locked, |frames| {
-                &mut frames[self.decoded_frames_returned - 1]
-            }))
-        } else {
-            None
-        }
+        Ok(self.get_decoding_output())
     }
 
     /// Note: the locked/unlocked api is like the following:
@@ -708,18 +693,17 @@ impl<'a> NvDecoder<'a> {
         frames_locked.push_back(frame);
     }
 
-    /// Frame properties obtained by the previous [`Self::decode()`] call, if the packet was
-    /// successfully parsed.
-    ///
-    /// Panics if the parsing was unsuccessful.
-    //
-    // TODO(mbernat): remove this method once we return `FrameInfo` together with decoding results.
-    pub fn frame_info(&self) -> &FrameInfo {
-        self.frame_info.as_ref().expect("Frame info to be set by `handle_video_sequence()`")
-    }
-
     pub fn set_reconfig_params() -> Result<(), NvDecoderError> {
         todo!()
+    }
+
+    /// Panics if [`Self::frame_info`] hasn't been initialized yet by successful parsing.
+    fn get_decoding_output(&self) -> DecodingOutput<'_> {
+        let frames = self.frames.lock().drain(0..).collect();
+        let frame_info =
+            self.frame_info.as_ref().expect("Frame info to be set by successful parsing.").clone();
+
+        DecodingOutput::new(frames, frame_info)
     }
 }
 

@@ -5,6 +5,8 @@ pub struct Frame<'a> {
 
 pub enum FrameData<'a> {
     Owned(Vec<u8>),
+    // TODO(mbernat): Device slices belong to a GPU address space, it's likely a UB to make Rust
+    // slices out of them.
     Device(&'a mut [u8]),
     // DevicePitched(&'a [u8]),
 }
