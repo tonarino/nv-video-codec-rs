@@ -14,6 +14,7 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
     pub fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()>;
     pub fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
+    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource;
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
@@ -29,7 +30,7 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
 }
 ```
 
-Method `get_next_input_frame()` basically provides a GPU device pointer that can be used as a target
+Method `get_next_input_resource()` provides a GPU resource that shoulde be used as a target
 to upload the frame data. Afterwards, `encode_frame()` provides packets of the encoded frame.
 
 ### NvEncoderResourceManager
