@@ -600,7 +600,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
+        input_frames: &mut [Box<ResourceManager::InputResource>], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -622,11 +622,8 @@ where
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
-            let inpf = input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input;
-            // TODO(efyang): make input_ptr restricted as an enum, or just straight up opengl tex
             let registered_input_frame = NvEncInputFrame {
-                input_ptr: input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
-                    as *mut Input,
+                input_ptr: &raw mut *input_frame.as_mut() as *mut Input,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,
@@ -704,7 +701,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
-        buffer: &mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+        buffer: &mut ResourceManager::InputResource,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -715,7 +712,7 @@ where
         let mut register_resource = NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
-            resourceToRegister: buffer as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut _,
+            resourceToRegister: &raw mut *buffer as *mut _,
             width,
             height,
             pitch,

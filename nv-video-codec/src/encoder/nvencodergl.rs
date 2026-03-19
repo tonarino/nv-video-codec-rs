@@ -102,6 +102,8 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
 pub(super) struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
+    type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+
     fn allocate_input_buffers(
         encoder: &mut NvEncoderBase<Self>,
         num_input_buffers: u32,
