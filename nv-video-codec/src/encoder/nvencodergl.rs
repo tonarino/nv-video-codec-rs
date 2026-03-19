@@ -1,16 +1,29 @@
 use super::{
     nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
+    NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
 };
+use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
     encoder: NvEncoderBase<NvEncoderGLResourceManager>,
 }
 
-impl_nvencoder_wrapper_type!(NvEncoderGL, NvEncoderGLResourceManager);
+impl Deref for NvEncoderGL {
+    type Target = NvEncoderBase<NvEncoderGLResourceManager>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.encoder
+    }
+}
+
+impl DerefMut for NvEncoderGL {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.encoder
+    }
+}
 
 impl NvEncoderExt for NvEncoderGL {
     fn encode_frame_from_data(
@@ -99,7 +112,7 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
     }
 }
 
-pub(super) struct NvEncoderGLResourceManager {}
+pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
