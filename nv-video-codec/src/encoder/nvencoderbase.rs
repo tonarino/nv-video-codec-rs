@@ -63,7 +63,7 @@ pub(super) struct Input {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
-pub struct NvEncoderBase<ResourceManager>
+pub struct NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -98,7 +98,7 @@ where
     _resource_manager: PhantomData<ResourceManager>,
 }
 
-impl<ResourceManager> NvEncoderBase<ResourceManager>
+impl<ResourceManager> NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -236,7 +236,7 @@ where
         Ok(())
     }
 
-    fn destroy_encoder(&mut self) -> NvEncoderResult<()> {
+    pub fn destroy_encoder(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
         }
@@ -521,7 +521,7 @@ where
     }
 }
 
-impl<ResourceManager> NvEncoderBase<ResourceManager>
+impl<ResourceManager> NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -1073,7 +1073,7 @@ where
     }
 }
 
-impl<ResourceManager> Drop for NvEncoderBase<ResourceManager>
+impl<ResourceManager> Drop for NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {

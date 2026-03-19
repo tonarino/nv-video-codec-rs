@@ -1,5 +1,5 @@
 use super::{
-    nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
+    nvencoderbase::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use nv_video_codec_sys::{
@@ -8,11 +8,11 @@ use nv_video_codec_sys::{
 use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
-    encoder: NvEncoderBase<NvEncoderGLResourceManager>,
+    encoder: NvEncoder<NvEncoderGLResourceManager>,
 }
 
 impl Deref for NvEncoderGL {
-    type Target = NvEncoderBase<NvEncoderGLResourceManager>;
+    type Target = NvEncoder<NvEncoderGLResourceManager>;
 
     fn deref(&self) -> &Self::Target {
         &self.encoder
@@ -71,7 +71,7 @@ impl NvEncoderGL {
     ) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
-            encoder: NvEncoderBase::new(
+            encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
                 width,
@@ -85,7 +85,7 @@ impl NvEncoderGL {
     }
 }
 
-impl NvEncoderBase<NvEncoderGLResourceManager> {
+impl NvEncoder<NvEncoderGLResourceManager> {
     fn release_gl_resources(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
@@ -118,7 +118,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
 
     fn allocate_input_buffers(
-        encoder: &mut NvEncoderBase<Self>,
+        encoder: &mut NvEncoder<Self>,
         num_input_buffers: u32,
     ) -> NvEncoderResult<()> {
         if !encoder.is_hw_encoder_initialized() {
@@ -181,7 +181,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
         Ok(())
     }
 
-    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> NvEncoderResult<()> {
+    fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> NvEncoderResult<()> {
         encoder.release_gl_resources()
     }
 }
