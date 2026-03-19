@@ -1,5 +1,5 @@
 use super::{
-    nvencoderbase::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
+    nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use nv_video_codec_sys::{
@@ -34,13 +34,12 @@ impl NvEncoderExt for NvEncoderGL {
         pic_params: Option<NV_ENC_PIC_PARAMS>,
         output_packet_buffer: &mut Vec<&[u8]>,
     ) -> NvEncoderResult<()> {
-        let encoder_input_frame = self.get_next_input_frame();
-        let resource = encoder_input_frame.input_ptr_as_gltex();
+        let resource = self.get_next_input_resource();
         // TODO: remove these hacks
         unsafe {
-            gl::BindTexture((*resource).target, (*resource).texture);
+            gl::BindTexture(resource.target, resource.texture);
             gl::TexSubImage2D(
-                (*resource).target,
+                resource.target,
                 0,                         // level
                 0,                         // x offset
                 0,                         // y offset
@@ -50,7 +49,7 @@ impl NvEncoderExt for NvEncoderGL {
                 gl::UNSIGNED_BYTE,         // type
                 data.as_ptr() as *const _, // data
             );
-            gl::BindTexture((*resource).target, 0);
+            gl::BindTexture(resource.target, 0);
         }
 
         self.encode_frame(output_packet_buffer, pic_params)

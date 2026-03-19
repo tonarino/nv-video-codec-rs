@@ -1,4 +1,4 @@
-use super::{nvencoderbase::NvEncoder, NvEncoderError};
+use super::{nvencoder::NvEncoder, NvEncoderError};
 
 pub trait NvEncoderResourceManager {
     type InputResource;

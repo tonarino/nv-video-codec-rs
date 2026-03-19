@@ -7,9 +7,9 @@ use nv_video_codec_sys::{
     NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
     NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
     NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
-    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
-    NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
+    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
+    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
+    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
 };
 
@@ -255,6 +255,13 @@ where
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame {
         // TODO(efyang): make this return value lifetime'd
         &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize]
+    }
+
+    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource {
+        let input_frame = &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize];
+        let resource_ptr = input_frame.input_ptr as *mut ResourceManager::InputResource;
+        // SAFETY: The input resources are backed by `self`.
+        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
     }
 
     pub fn encode_frame(
@@ -1093,11 +1100,4 @@ pub struct NvEncInputFrame {
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
-}
-
-// TODO : remove this hack
-impl NvEncInputFrame {
-    pub fn input_ptr_as_gltex(&self) -> *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
-        self.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
-    }
 }
