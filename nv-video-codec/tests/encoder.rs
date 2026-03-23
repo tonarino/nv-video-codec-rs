@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL};
+use nv_video_codec::encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL, NvEncoderSettings};
 use nv_video_codec_sys::{
     guids, _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
 };
@@ -38,8 +38,8 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Gl
     };
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let encoder =
-        NvEncoderGL::builder(width, height, format).build().expect("Could not create NvEncoderGl");
+    let settings = NvEncoderSettings::new(width, height, format);
+    let encoder = NvEncoderGL::new(settings).expect("Could not create NvEncoderGl");
 
     Ok(GlEncoderContext { encoder, _context: context })
 }

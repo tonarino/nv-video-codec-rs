@@ -536,12 +536,7 @@ where
     pub(super) fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-        extra_output_delay: u32,
-        motion_estimation_only: bool,
-        output_in_video_memory: bool,
+        settings: NvEncoderSettings,
     ) -> NvEncoderResult<Self> {
         let enc_api = Self::load_nv_enc_api()?;
 
@@ -567,6 +562,15 @@ where
             )
             .into_nvenc_result()?;
         }
+
+        let NvEncoderSettings {
+            width,
+            height,
+            buffer_format,
+            extra_output_delay,
+            motion_estimation_only,
+            output_in_video_memory,
+        } = settings;
 
         Ok(Self {
             motion_estimation_only,
@@ -1100,4 +1104,37 @@ pub struct NvEncInputFrame {
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+}
+
+pub struct NvEncoderSettings {
+    width: u32,
+    height: u32,
+    buffer_format: BufferFormat,
+    extra_output_delay: u32,
+    motion_estimation_only: bool,
+    output_in_video_memory: bool,
+}
+
+impl NvEncoderSettings {
+    builder_field_setter!(extra_output_delay: u32);
+
+    builder_field_setter!(motion_estimation_only: bool);
+
+    builder_field_setter!(output_in_video_memory: bool);
+
+    pub fn new(width: u32, height: u32, buffer_format: BufferFormat) -> Self {
+        // Note: this was originally set to 3 in NvEncoderGL.h by default
+        // Absolutely necessary for performance
+        // Three shall be the number thou shalt count, and the number of counting shall be three.
+        let extra_output_delay = 3;
+
+        Self {
+            width,
+            height,
+            buffer_format,
+            extra_output_delay,
+            motion_estimation_only: false,
+            output_in_video_memory: false,
+        }
+    }
 }

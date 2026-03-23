@@ -1,7 +1,8 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
+    NvEncoderExt, NvEncoderResult,
 };
+use crate::encoder::nvencoder::NvEncoderSettings;
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
 };
@@ -57,28 +58,17 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
-    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderGLBuilder {
-        NvEncoderGLBuilder::new(width, height, buffer_format)
+    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderSettings {
+        NvEncoderSettings::new(width, height, buffer_format)
     }
 
-    pub fn new(
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-        extra_output_delay: u32,
-        motion_extimation_only: bool,
-    ) -> NvEncoderResult<Self> {
+    pub fn new(settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
-                width,
-                height,
-                buffer_format,
-                extra_output_delay,
-                motion_extimation_only,
-                false,
+                settings,
             )?,
         })
     }
