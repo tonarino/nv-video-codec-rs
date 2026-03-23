@@ -4,8 +4,7 @@ use super::{
 };
 use crate::{common::IntoCudaResult, encoder::nvencoder::NvEncoderSettings};
 use nv_video_codec_sys::{
-    cuMemAllocPitch_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
-    NV_ENC_PIC_PARAMS,
+    cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE, NV_ENC_PIC_PARAMS,
 };
 use rustacuda::{context::ContextStack, prelude::Context};
 use std::ops::{Deref, DerefMut};
@@ -60,29 +59,39 @@ impl NvEncoderCuda {
 
 impl NvEncoder<NvEncoderCudaResourceManager> {
     fn release_cuda_resources(&mut self) -> NvEncoderResult<()> {
-        // TODO: implement the CUDA version of this
-
         if self.encoder_handle.is_null() {
             return Ok(());
         }
+
         self.unregister_input_resources()?;
 
+        ContextStack::push(&self.resource_context).unwrap();
+
         for input_frame in self.input_frames.iter() {
-            let resource_ptr = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = input_frame.input_ptr as *mut CUdeviceptr;
             if !resource_ptr.is_null() {
-                unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
+                unsafe {
+                    // NOTE(mbernat): Dereferencing because we store resources in boxes.
+                    cuMemFree_v2(*resource_ptr);
+                }
+
                 // TODO(efyang) check for possible memory leak here (vs original delete)
             }
         }
         self.input_frames.clear();
 
         for reference_frame in self.reference_frames.iter() {
-            let resource_ptr = reference_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = reference_frame.input_ptr as *mut CUdeviceptr;
             if !resource_ptr.is_null() {
-                unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
+                unsafe {
+                    cuMemFree_v2(*resource_ptr);
+                }
             }
         }
         self.reference_frames.clear();
+
+        ContextStack::pop().unwrap();
+
         Ok(())
     }
 }
