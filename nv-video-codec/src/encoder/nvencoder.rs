@@ -96,6 +96,7 @@ where
     max_encode_width: u32,
     max_encode_height: u32,
     _resource_manager: PhantomData<ResourceManager>,
+    pub(super) resource_context: ResourceManager::ResourceContext,
 }
 
 impl<ResourceManager> NvEncoder<ResourceManager>
@@ -536,6 +537,7 @@ where
     pub(super) fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
+        resource_context: ResourceManager::ResourceContext,
         settings: NvEncoderSettings,
     ) -> NvEncoderResult<Self> {
         let enc_api = Self::load_nv_enc_api()?;
@@ -602,6 +604,7 @@ where
             max_encode_width: width,
             max_encode_height: height,
             _resource_manager: PhantomData,
+            resource_context,
         })
     }
 
@@ -636,8 +639,11 @@ where
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
+
+            let input_ptr = &raw mut *input_frame.as_mut() as *mut Input;
+
             let registered_input_frame = NvEncInputFrame {
-                input_ptr: &raw mut *input_frame.as_mut() as *mut Input,
+                input_ptr,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,

@@ -58,16 +58,13 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
-    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderSettings {
-        NvEncoderSettings::new(width, height, buffer_format)
-    }
-
     pub fn new(settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
+                (),
                 settings,
             )?,
         })
@@ -105,6 +102,7 @@ pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+    type ResourceContext = ();
 
     fn allocate_input_buffers(
         encoder: &mut NvEncoder<Self>,

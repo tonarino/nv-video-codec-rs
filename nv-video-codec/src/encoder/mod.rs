@@ -3,6 +3,7 @@ mod nvencoder;
 #[macro_use]
 pub mod traits;
 mod defaults;
+pub mod nvencodercuda;
 pub mod nvencodergl;
 pub(super) mod resource_manager;
 pub mod types;
