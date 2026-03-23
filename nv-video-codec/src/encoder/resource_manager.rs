@@ -1,6 +1,7 @@
 use super::{nvencoder::NvEncoder, NvEncoderError};
 
 pub trait NvEncoderResourceManager {
+    type ResourceContext;
     type InputResource;
 
     fn allocate_input_buffers(

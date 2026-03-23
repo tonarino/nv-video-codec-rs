@@ -1,8 +1,11 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
+    NvEncoderExt, NvEncoderResult,
 };
-use crate::encoder::EncodePicFlags;
+use crate::encoder::{
+    nvencoder::{Input, NvEncoderSettings},
+    EncodePicFlags,
+};
 use nv_video_codec_sys::{_NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX};
 use std::ops::{Deref, DerefMut};
 
@@ -56,28 +59,14 @@ impl NvEncoderExt for NvEncoderGL {
 }
 
 impl NvEncoderGL {
-    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderGLBuilder {
-        NvEncoderGLBuilder::new(width, height, buffer_format)
-    }
-
-    pub fn new(
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-        extra_output_delay: u32,
-        motion_extimation_only: bool,
-    ) -> NvEncoderResult<Self> {
+    pub fn new(settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
-                width,
-                height,
-                buffer_format,
-                extra_output_delay,
-                motion_extimation_only,
-                false,
+                (),
+                settings,
             )?,
         })
     }
@@ -114,6 +103,7 @@ pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+    type ResourceContext = ();
 
     fn allocate_input_buffers(
         encoder: &mut NvEncoder<Self>,
@@ -157,17 +147,22 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                     gl::BindTexture(gl::TEXTURE_RECTANGLE, 0);
                 }
 
-                let resource = Box::new(NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+                let resource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
                     texture: tex,
                     target: gl::TEXTURE_RECTANGLE,
-                });
+                };
 
                 input_frames.push(resource);
             }
 
+            // TODO: do not leak but store until `release_input_buffers()` is called.
+            let input_frame_ptrs = input_frames
+                .leak()
+                .iter_mut()
+                .map(|input_frame| input_frame as *mut _ as *mut Input);
+
             encoder.register_input_resources(
-                    // TODO: do not leak but store until `release_input_buffers()` is called.
-                    input_frames.leak(),
+                    input_frame_ptrs,
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),
