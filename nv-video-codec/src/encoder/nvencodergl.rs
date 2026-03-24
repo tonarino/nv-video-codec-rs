@@ -2,7 +2,7 @@ use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoderExt, NvEncoderResult,
 };
-use crate::encoder::nvencoder::NvEncoderSettings;
+use crate::encoder::nvencoder::{Input, NvEncoderSettings};
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
 };
@@ -154,9 +154,14 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                 input_frames.push(resource);
             }
 
+            // TODO: do not leak but store until `release_input_buffers()` is called.
+            let input_frame_ptrs = input_frames
+                .leak()
+                .iter_mut()
+                .map(|input_frame| input_frame as *mut _ as *mut Input);
+
             encoder.register_input_resources(
-                    // TODO: do not leak but store until `release_input_buffers()` is called.
-                    input_frames.leak(),
+                    input_frame_ptrs,
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),

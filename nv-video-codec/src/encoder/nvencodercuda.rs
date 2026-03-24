@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     common::IntoCudaResult,
-    encoder::nvencoder::{Device, NvEncoderSettings},
+    encoder::nvencoder::{Device, Input, NvEncoderSettings},
 };
 use nv_video_codec_sys::{
     cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE, NV_ENC_PIC_PARAMS,
@@ -74,23 +74,20 @@ impl NvEncoder<NvEncoderCudaResourceManager> {
         ContextStack::push(&self.resource_context).unwrap();
 
         for input_frame in self.input_frames.iter() {
-            let resource_ptr = input_frame.input_ptr as *mut CUdeviceptr;
+            let resource_ptr = input_frame.input_ptr;
             if !resource_ptr.is_null() {
                 unsafe {
-                    // NOTE(mbernat): Dereferencing because we store resources in boxes.
-                    cuMemFree_v2(*resource_ptr);
+                    cuMemFree_v2(resource_ptr as CUdeviceptr);
                 }
-
-                // TODO(efyang) check for possible memory leak here (vs original delete)
             }
         }
         self.input_frames.clear();
 
         for reference_frame in self.reference_frames.iter() {
-            let resource_ptr = reference_frame.input_ptr as *mut CUdeviceptr;
+            let resource_ptr = reference_frame.input_ptr;
             if !resource_ptr.is_null() {
                 unsafe {
-                    cuMemFree_v2(*resource_ptr);
+                    cuMemFree_v2(resource_ptr as CUdeviceptr);
                 }
             }
         }
@@ -154,9 +151,12 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
 
             ContextStack::pop().unwrap();
 
+            // TODO: do not leak but store until `release_input_buffers()` is called.
+            let input_frame_ptrs =
+                input_frames.leak().iter_mut().map(|input_frame| *input_frame as *mut Input);
+
             encoder.register_input_resources(
-                    // TODO: do not leak but store until `release_input_buffers()` is called.
-                    input_frames.leak(),
+                    input_frame_ptrs,
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),

@@ -1,5 +1,5 @@
 #![allow(unused_variables, dead_code)]
-use std::marker::PhantomData;
+use std::{marker::PhantomData, os::raw::c_void};
 
 use nv_video_codec_sys::{
     guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_FLAGS,
@@ -58,7 +58,7 @@ pub struct Device {
 }
 
 #[repr(C)]
-pub(super) struct Input {
+pub(crate) struct Input {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
@@ -617,7 +617,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [ResourceManager::InputResource], // TODO: make this not mut
+        input_frame_ptrs: impl Iterator<Item = *mut Input>,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -625,9 +625,9 @@ where
         buffer_format: BufferFormat,
         reference_frame: bool,
     ) -> NvEncoderResult<()> {
-        for input_frame in input_frames.iter_mut() {
+        for input_frame_ptr in input_frame_ptrs {
             let registered_ptr = self.register_resource(
-                input_frame,
+                input_frame_ptr,
                 resource_type,
                 width,
                 height,
@@ -640,10 +640,8 @@ where
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
 
-            let input_ptr = input_frame as *mut ResourceManager::InputResource as *mut Input;
-
             let registered_input_frame = NvEncInputFrame {
-                input_ptr,
+                input_ptr: input_frame_ptr,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,
@@ -721,7 +719,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
-        buffer: &mut ResourceManager::InputResource,
+        input_frame_ptr: *mut Input,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -732,7 +730,7 @@ where
         let mut register_resource = NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
-            resourceToRegister: &raw mut *buffer as *mut _,
+            resourceToRegister: input_frame_ptr as *mut c_void,
             width,
             height,
             pitch,
