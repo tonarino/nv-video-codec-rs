@@ -2,11 +2,17 @@ use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoderExt, NvEncoderResult,
 };
-use crate::{common::IntoCudaResult, encoder::nvencoder::NvEncoderSettings};
+use crate::{
+    common::IntoCudaResult,
+    encoder::nvencoder::{Device, NvEncoderSettings},
+};
 use nv_video_codec_sys::{
     cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE, NV_ENC_PIC_PARAMS,
 };
-use rustacuda::{context::ContextStack, prelude::Context};
+use rustacuda::{
+    context::{ContextHandle as _, ContextStack},
+    prelude::Context,
+};
 use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderCuda {
@@ -49,7 +55,7 @@ impl NvEncoderCuda {
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_CUDA,
-                std::ptr::null_mut(),
+                context.get_inner() as *mut Device,
                 context,
                 settings,
             )?,
