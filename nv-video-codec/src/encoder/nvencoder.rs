@@ -617,7 +617,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [Box<ResourceManager::InputResource>], // TODO: make this not mut
+        input_frames: &mut [ResourceManager::InputResource], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -640,7 +640,7 @@ where
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
 
-            let input_ptr = &raw mut *input_frame.as_mut() as *mut Input;
+            let input_ptr = input_frame as *mut ResourceManager::InputResource as *mut Input;
 
             let registered_input_frame = NvEncInputFrame {
                 input_ptr,

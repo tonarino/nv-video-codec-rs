@@ -149,9 +149,7 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
                     .unwrap();
                 }
 
-                // TODO(mbernat): Get rid of the Box, it's only here because the GL impl forced it
-                // into register_input_resources() interface.
-                input_frames.push(Box::new(device_frame_ptr));
+                input_frames.push(device_frame_ptr);
             }
 
             ContextStack::pop().unwrap();

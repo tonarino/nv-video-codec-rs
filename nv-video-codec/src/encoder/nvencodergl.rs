@@ -146,10 +146,10 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                     gl::BindTexture(gl::TEXTURE_RECTANGLE, 0);
                 }
 
-                let resource = Box::new(NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+                let resource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
                     texture: tex,
                     target: gl::TEXTURE_RECTANGLE,
-                });
+                };
 
                 input_frames.push(resource);
             }
