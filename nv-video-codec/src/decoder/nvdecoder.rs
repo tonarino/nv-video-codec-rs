@@ -1,11 +1,15 @@
-use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat};
+use super::{
+    types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect, SurfaceFormat},
+    DecoderPacketFlags, NvDecoderError,
+};
 use crate::{
-    common::cuda_result::IntoCudaResult,
+    common::{cuda_result::IntoCudaResult, util::ContextStack},
     decoder::{
         frame::{info::FrameInfo, Buffer as _, DecodingOutput, Frame, FrameAllocator, OwnedFrame},
         NvDecoderBuilder,
     },
 };
+use cudarc::driver::CudaContext;
 use ffi::{
     cuMemcpy2DAsync_v2, cuStreamSynchronize, cudaVideoCreateFlags_enum, cuvidCreateDecoder,
     cuvidCtxLockCreate, cuvidCtxLockDestroy, cuvidDecodePicture, cuvidDecodeStatus_enum,
@@ -18,20 +22,18 @@ use ffi::{
     CUVIDPICPARAMS, CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET,
 };
 use nv_video_codec_sys as ffi;
-use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
     collections::VecDeque,
     convert::TryInto,
     os::raw::{c_int, c_ulong, c_void},
+    sync::Arc,
     time::Instant,
 };
-
-use super::{DecoderPacketFlags, NvDecoderError};
 
 pub struct NvDecoder<A: FrameAllocator> {
     parser: CUvideoparser,
     decoder: CUvideodecoder,
-    context: Context,
+    context: Arc<CudaContext>,
     codec: Codec,
     chroma_format: ChromaFormat,
     video_format: CUVIDEOFORMAT,
@@ -101,7 +103,7 @@ unsafe extern "C" fn handle_operating_point_proc<A: FrameAllocator>(
     (decoder as *mut NvDecoder<A>).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_within_context<F, T>(context: &Context, mut func: F)
+fn do_within_context<F, T>(context: &CudaContext, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
@@ -511,7 +513,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
     pub(super) fn new(builder: NvDecoderBuilder) -> Result<Box<Self>, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
-            cuvidCtxLockCreate(&mut ctx_lock, builder.context.get_inner() as *mut ffi::CUctx_st)
+            cuvidCtxLockCreate(&mut ctx_lock, builder.context.cu_ctx() as *mut ffi::CUctx_st)
                 .into_cuda_result()?;
             ctx_lock
         };

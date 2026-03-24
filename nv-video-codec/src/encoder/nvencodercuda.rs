@@ -3,18 +3,16 @@ use super::{
     NvEncoderResult,
 };
 use crate::{
-    common::IntoCudaResult,
+    common::{util::ContextStack, IntoCudaResult},
     encoder::nvencoder::{Device, Input, NvEncInputFrame, NvEncoderSettings},
 };
 use cuda_gl_interop::{CudaSliceMut, Size};
+use cudarc::driver::CudaContext;
 use nv_video_codec_sys::{cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE};
-use rustacuda::{
-    context::{ContextHandle as _, ContextStack},
-    prelude::Context,
-};
 use std::{
     ffi::c_void,
     ops::{Deref, DerefMut},
+    sync::Arc,
 };
 
 pub struct NvEncoderCuda {
@@ -36,11 +34,11 @@ impl DerefMut for NvEncoderCuda {
 }
 
 impl NvEncoderCuda {
-    pub fn new(context: Context, settings: NvEncoderSettings) -> NvEncoderResult<Self> {
+    pub fn new(context: Arc<CudaContext>, settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_CUDA,
-                context.get_inner() as *mut Device,
+                context.cu_ctx() as *mut Device,
                 context,
                 settings,
             )?,
@@ -100,7 +98,7 @@ pub struct NvEncoderCudaResourceManager {}
 impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
     type InputResource = CUdeviceptr;
     type InputResourceRef<'a> = CudaSliceMut<'a>;
-    type ResourceContext = Context;
+    type ResourceContext = Arc<CudaContext>;
 
     fn allocate_input_buffers(
         encoder: &mut NvEncoder<Self>,

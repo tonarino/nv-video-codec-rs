@@ -3,18 +3,15 @@ extern crate log;
 extern crate simple_logger;
 
 use anyhow::Result;
+use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::decoder::{
     frame::{
         device::DeviceFrameAllocator, host::HostFrameAllocator, DecodingOutput, FrameAllocator,
     },
     DecoderPacketFlags, NvDecoderBuilder,
 };
-use rustacuda::{
-    context::{Context, ContextFlags},
-    device::Device,
-};
 use simple_logger::SimpleLogger;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 #[path = "utils.rs"]
 #[macro_use]
@@ -24,11 +21,9 @@ mod utils;
 // From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
 const DECODE_TRIES: usize = 3;
 
-fn init_cuda_ctx() -> Result<Context> {
-    rustacuda::init(rustacuda::CudaFlags::empty())?;
-    let device = Device::get_device(0)?;
-    let context =
-        Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
+fn init_cuda_ctx() -> Result<Arc<CudaContext>> {
+    let context = CudaContext::new(0)?;
+    context.set_flags(CUctx_flags::CU_CTX_MAP_HOST)?;
     Ok(context)
 }
 
