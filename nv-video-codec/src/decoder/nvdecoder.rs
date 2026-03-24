@@ -4,7 +4,10 @@ use super::{
 };
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{DecodingOutput, FrameInfo, NvDecoderBuilder},
+    decoder::{
+        util::{pop_context, push_context},
+        DecodingOutput, FrameInfo, NvDecoderBuilder,
+    },
 };
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
@@ -20,7 +23,6 @@ use ffi::{
 };
 use nv_video_codec_sys as ffi;
 use parking_lot::Mutex;
-use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
     collections::VecDeque,
     convert::TryInto,
@@ -30,11 +32,12 @@ use std::{
 };
 
 use super::{DecoderPacketFlags, Frame, NvDecoderError};
+use cudarc::driver::CudaContext;
 
 pub struct NvDecoder<'a> {
     parser: CUvideoparser,
     decoder: CUvideodecoder,
-    context: Context,
+    context: Arc<CudaContext>,
     use_device_frame: bool,
     codec: Codec,
     chroma_format: ChromaFormat,
@@ -107,18 +110,18 @@ unsafe extern "C" fn handle_operating_point_proc(
     (decoder as *mut NvDecoder).as_mut().unwrap().handle_operating_point(op_info)
 }
 
-fn do_within_context<F, T>(context: &Context, mut func: F)
+fn do_within_context<F, T>(context: &CudaContext, mut func: F)
 where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
 {
-    ContextStack::push(context).unwrap();
+    push_context(context).unwrap();
     func().into_cuda_result().expect("Cuda NVDEC api call failure");
-    ContextStack::pop().unwrap();
+    pop_context().unwrap();
 }
 
 impl<'a> NvDecoder<'a> {
-    pub fn builder(context: Context, codec: Codec) -> NvDecoderBuilder {
+    pub fn builder(context: Arc<CudaContext>, codec: Codec) -> NvDecoderBuilder {
         NvDecoderBuilder::new(context, codec)
     }
 
@@ -361,7 +364,7 @@ impl<'a> NvDecoder<'a> {
 
         // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work
         // here with this
-        ContextStack::push(&self.context).unwrap();
+        push_context(&self.context).unwrap();
         unsafe {
             // NOTE: this call takes about 1.6ms (about half the total time of this func)
             // TODO(efyang): optimization in final implementation
@@ -532,7 +535,7 @@ impl<'a> NvDecoder<'a> {
             cuStreamSynchronize(self.stream).into_cuda_result().unwrap();
         }
 
-        ContextStack::pop().unwrap();
+        pop_context().unwrap();
         // timestamp already set earlier
 
         // NOTE: this call takes negligible time (about 2us)
@@ -575,7 +578,7 @@ impl<'a> NvDecoder<'a> {
     pub(super) fn new(builder: NvDecoderBuilder) -> Result<Box<Self>, NvDecoderError> {
         let ctx_lock = unsafe {
             let mut ctx_lock = std::ptr::null_mut();
-            cuvidCtxLockCreate(&mut ctx_lock, builder.context.get_inner() as *mut ffi::CUctx_st)
+            cuvidCtxLockCreate(&mut ctx_lock, builder.context.cu_ctx() as *mut ffi::CUctx_st)
                 .into_cuda_result()?;
             ctx_lock
         };
@@ -734,7 +737,7 @@ impl<'a> Drop for NvDecoder<'a> {
             }
         }
 
-        ContextStack::pop().unwrap();
+        pop_context().unwrap();
         unsafe {
             let err = cuvidCtxLockDestroy(self.ctx_lock);
             err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");

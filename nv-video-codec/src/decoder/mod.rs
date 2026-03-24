@@ -6,6 +6,7 @@ pub mod frame;
 pub mod frame_info;
 pub mod nvdecoder;
 pub mod types;
+mod util;
 pub mod videoformat;
 
 pub use builder::*;

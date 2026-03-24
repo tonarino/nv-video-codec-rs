@@ -8,20 +8,15 @@ mod utils;
 
 use anyhow::Result;
 use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
-use rustacuda::{
-    context::{Context, ContextFlags},
-    device::Device,
-};
 use simple_logger::SimpleLogger;
 
+use cudarc::driver::CudaContext;
+use std::sync::Arc;
 #[cfg(feature = "torture")]
 use std::time::Duration;
 
-fn init_cuda_ctx() -> Result<Context> {
-    rustacuda::init(rustacuda::CudaFlags::empty())?;
-    let device = Device::get_device(0)?;
-    let context =
-        Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
+fn init_cuda_ctx() -> Result<Arc<CudaContext>> {
+    let context = CudaContext::new(0)?;
     Ok(context)
 }
 

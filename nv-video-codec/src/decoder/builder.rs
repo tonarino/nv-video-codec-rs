@@ -1,12 +1,12 @@
-use rustacuda::context::Context;
-
 use super::{
     types::{Codec, Dim, Rect},
     NvDecoder, NvDecoderError,
 };
+use cudarc::driver::CudaContext;
+use std::sync::Arc;
 
 pub struct NvDecoderBuilder {
-    pub(super) context: Context,
+    pub(super) context: Arc<CudaContext>,
     pub(super) use_device_frame: bool,
     pub(super) codec: Codec,
     pub(super) low_latency: bool,
@@ -35,7 +35,7 @@ impl NvDecoderBuilder {
 
     builder_field_setter!(clock_rate: u32);
 
-    pub fn new(context: Context, codec: Codec) -> Self {
+    pub fn new(context: Arc<CudaContext>, codec: Codec) -> Self {
         Self {
             context,
             use_device_frame: false,

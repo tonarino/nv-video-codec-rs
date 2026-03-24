@@ -1,5 +1,4 @@
 use super::{BufferFormat, NvEncoderError, NvEncoderGL};
-// use rustacuda::context::Context;
 
 // pub struct NvEncoderCudaBuilder {
 //     context: Context,
