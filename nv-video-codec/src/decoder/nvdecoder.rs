@@ -4,10 +4,7 @@ use super::{
 };
 use crate::{
     common::cuda_result::IntoCudaResult,
-    decoder::{
-        util::{pop_context, push_context},
-        DecodingOutput, FrameInfo, NvDecoderBuilder,
-    },
+    decoder::{util::ContextStack, DecodingOutput, FrameInfo, NvDecoderBuilder},
 };
 use ffi::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, cuMemcpy2DAsync_v2, cuStreamSynchronize,
@@ -115,9 +112,9 @@ where
     F: FnMut() -> T,
     T: IntoCudaResult<()>,
 {
-    push_context(context).unwrap();
+    ContextStack::push(context).unwrap();
     func().into_cuda_result().expect("Cuda NVDEC api call failure");
-    pop_context().unwrap();
+    ContextStack::pop().unwrap();
 }
 
 impl<'a> NvDecoder<'a> {
@@ -364,7 +361,7 @@ impl<'a> NvDecoder<'a> {
 
         // TODO(efyang) : figure out how to make cuvid do_ctxpush_cuvidfunc lifetimes work
         // here with this
-        push_context(&self.context).unwrap();
+        ContextStack::push(&self.context).unwrap();
         unsafe {
             // NOTE: this call takes about 1.6ms (about half the total time of this func)
             // TODO(efyang): optimization in final implementation
@@ -535,7 +532,7 @@ impl<'a> NvDecoder<'a> {
             cuStreamSynchronize(self.stream).into_cuda_result().unwrap();
         }
 
-        pop_context().unwrap();
+        ContextStack::pop().unwrap();
         // timestamp already set earlier
 
         // NOTE: this call takes negligible time (about 2us)
@@ -737,7 +734,7 @@ impl<'a> Drop for NvDecoder<'a> {
             }
         }
 
-        pop_context().unwrap();
+        ContextStack::pop().unwrap();
         unsafe {
             let err = cuvidCtxLockDestroy(self.ctx_lock);
             err.into_cuda_result().expect("Failure on nvdecoder ctx lock destroy");
