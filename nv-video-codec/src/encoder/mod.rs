@@ -1,6 +1,6 @@
 pub mod builder;
 pub mod error;
-mod nvencoderbase;
+mod nvencoder;
 #[macro_use]
 pub mod traits;
 mod defaults;

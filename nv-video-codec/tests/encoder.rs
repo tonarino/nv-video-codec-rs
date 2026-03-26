@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::encoder::{types::BufferFormat, NvEncoder, NvEncoderExt, NvEncoderGL};
+use nv_video_codec::encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL};
 use nv_video_codec_sys::{
     guids, _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
 };
@@ -98,13 +98,12 @@ fn encode_single_frame_grayscale() -> Result<()> {
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
-    let encoder_input_frame = encoder.get_next_input_frame();
-    let resource = encoder_input_frame.input_ptr_as_gltex();
+    let resource = encoder.get_next_input_resource();
     // TODO: remove these hacks
     unsafe {
-        gl::BindTexture((*resource).target, (*resource).texture);
+        gl::BindTexture(resource.target, resource.texture);
         gl::TexSubImage2D(
-            (*resource).target,
+            resource.target,
             0,                         // level
             0,                         // x offset
             0,                         // y offset
@@ -114,7 +113,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
             gl::UNSIGNED_BYTE,         // type
             data.as_ptr() as *const _, // data
         );
-        gl::BindTexture((*resource).target, 0);
+        gl::BindTexture(resource.target, 0);
     }
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, None)?;
