@@ -30,7 +30,7 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
 }
 ```
 
-Method `get_next_input_resource()` provides a GPU resource that shoulde be used as a target
+Method `get_next_input_resource()` provides a GPU resource that should be used as a target
 to upload the frame data. Afterwards, `encode_frame()` provides packets of the encoded frame.
 
 ### NvEncoderResourceManager
