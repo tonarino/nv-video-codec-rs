@@ -7,9 +7,9 @@ use nv_video_codec_sys::{
     NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
     NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
     NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
-    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
-    NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
+    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
+    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
+    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
 };
 
@@ -17,7 +17,7 @@ use crate::encoder::defaults::CustomDefault;
 
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
-    NvEncoder, NvEncoderError, NvEncoderResult,
+    NvEncoderError, NvEncoderResult,
 };
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
@@ -63,7 +63,7 @@ pub(super) struct Input {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
-pub(super) struct NvEncoderBase<ResourceManager>
+pub struct NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -98,11 +98,14 @@ where
     _resource_manager: PhantomData<ResourceManager>,
 }
 
-impl<ResourceManager> NvEncoder for NvEncoderBase<ResourceManager>
+impl<ResourceManager> NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
-    fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()> {
+    pub fn create_encoder(
+        &mut self,
+        encoder_params: &NV_ENC_INITIALIZE_PARAMS,
+    ) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
         }
@@ -233,7 +236,7 @@ where
         Ok(())
     }
 
-    fn destroy_encoder(&mut self) -> NvEncoderResult<()> {
+    pub fn destroy_encoder(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
         }
@@ -249,12 +252,19 @@ where
     // }
 
     // TODO: make this (and get_next_reference_frame) optional
-    fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame {
+    pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame {
         // TODO(efyang): make this return value lifetime'd
         &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize]
     }
 
-    fn encode_frame(
+    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource {
+        let input_frame = &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize];
+        let resource_ptr = input_frame.input_ptr as *mut ResourceManager::InputResource;
+        // SAFETY: The input resources are backed by `self`.
+        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
+    }
+
+    pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
         pic_params: Option<NV_ENC_PIC_PARAMS>,
@@ -285,7 +295,7 @@ where
         Ok(())
     }
 
-    fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()> {
+    pub fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
             return Err(NvEncError::EncoderNotInitialized.into());
@@ -340,7 +350,7 @@ where
         self.height
     }
 
-    fn get_frame_size(&self) -> NvEncoderResult<u32> {
+    pub fn get_frame_size(&self) -> NvEncoderResult<u32> {
         match self.get_pixel_format() {
             BufferFormat::YV12 | BufferFormat::IYUV | BufferFormat::NV12 => Ok(self
                 .get_encode_width()
@@ -362,7 +372,7 @@ where
         }
     }
 
-    fn create_default_encoder_params(
+    pub fn create_default_encoder_params(
         &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
@@ -509,7 +519,7 @@ where
     //     unimplemented!()
     // }
 
-    fn get_pixel_format(&self) -> BufferFormat {
+    pub fn get_pixel_format(&self) -> BufferFormat {
         self.buffer_format
     }
 
@@ -518,7 +528,7 @@ where
     }
 }
 
-impl<ResourceManager> NvEncoderBase<ResourceManager>
+impl<ResourceManager> NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -600,7 +610,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [Box<NV_ENC_INPUT_RESOURCE_OPENGL_TEX>], // TODO: make this not mut
+        input_frames: &mut [Box<ResourceManager::InputResource>], // TODO: make this not mut
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -622,11 +632,8 @@ where
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
-            let inpf = input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut Input;
-            // TODO(efyang): make input_ptr restricted as an enum, or just straight up opengl tex
             let registered_input_frame = NvEncInputFrame {
-                input_ptr: input_frame.as_mut() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
-                    as *mut Input,
+                input_ptr: &raw mut *input_frame.as_mut() as *mut Input,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,
@@ -704,7 +711,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
-        buffer: &mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+        buffer: &mut ResourceManager::InputResource,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -715,7 +722,7 @@ where
         let mut register_resource = NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
-            resourceToRegister: buffer as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX as *mut _,
+            resourceToRegister: &raw mut *buffer as *mut _,
             width,
             height,
             pitch,
@@ -1073,7 +1080,7 @@ where
     }
 }
 
-impl<ResourceManager> Drop for NvEncoderBase<ResourceManager>
+impl<ResourceManager> Drop for NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
@@ -1093,11 +1100,4 @@ pub struct NvEncInputFrame {
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
-}
-
-// TODO : remove this hack
-impl NvEncInputFrame {
-    pub fn input_ptr_as_gltex(&self) -> *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
-        self.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX
-    }
 }

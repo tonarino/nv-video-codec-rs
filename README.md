@@ -7,20 +7,21 @@ higher-level bindings are provided.
 
 ### Encoding
 
-The main interface is provided by the `NvEncoder` trait.
+The main interface is provided by `NvEncoder<ResourceManager>`.
 
 ```rust
-pub trait NvEncoder {
-    fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()>;
-    fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
-    fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
-    fn encode_frame(
+impl<ResourceManager> NvEncoder<ResourceManager> {
+    pub fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()>;
+    pub fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
+    pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
+    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource;
+    pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
         pic_params: Option<NV_ENC_PIC_PARAMS>,
     ) -> NvEncoderResult<()>;
-    fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()>;
-    fn create_default_encoder_params(
+    pub fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()>;
+    pub fn create_default_encoder_params(
         &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
@@ -29,27 +30,32 @@ pub trait NvEncoder {
 }
 ```
 
-Method `get_next_input_frame()` basically provides a GPU device pointer that can be used as a target
+Method `get_next_input_resource()` provides a GPU resource that should be used as a target
 to upload the frame data. Afterwards, `encode_frame()` provides packets of the encoded frame.
+
+### NvEncoderResourceManager
+
+This trait specifies what kind of resources are used to back the frames used for encoding.
+
+```rust
+pub trait NvEncoderResourceManager {
+    type InputResource;
+
+    fn allocate_input_buffers(
+        encoder: &mut NvEncoder<Self>,
+        num_input_buffers: u32,
+    ) -> Result<(), NvEncoderError>;
+
+    fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> Result<(), NvEncoderError>;
+}
+```
 
 #### `NvEncoderGL`
 
-The `NvEncoder` interface is implemented by `NvEncoderGL` that can be used to feed the
-encoder with OpenGL textures.
+This is a thin wrapper over `NvEncoder<NvEncoderGLResourceManager>` that can be used to feed the encoder with OpenGL textures.
 
 This type additionally implements `fn NvEncoderExt::encode_frame_from_data()` that combines
 `get_next_input_frame()`, OpenGL texture upload and `encode_frame()` as a convenience.
-
-Implementation-wise this type is just a thin wrapper around `NvEncoderBase` that provides basic
-OpenGL texture management.
-
-#### Beyond OpenGL
-
-`NvEncoderBase` requires an implementation of `NvEncoderResourceManager` to allocate and release
-the input buffers. At first sight it looks like it could be used to create non-OpenGL-based encoders
-but internally it uses `NvEncoderBase::register_input_resources()`, which in turns relies on
-`NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX`. It should be possible to generalize this to also work with
-`NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR` and `NV_ENC_INPUT_RESOURCE_TYPE_CUDAARRAY`, if desired.
 
 ### Decoding
 

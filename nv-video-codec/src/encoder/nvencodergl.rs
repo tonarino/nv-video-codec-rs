@@ -1,16 +1,29 @@
 use super::{
-    nvencoderbase::NvEncoderBase, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoder, NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
+    nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
+    NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
 };
+use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
-    encoder: NvEncoderBase<NvEncoderGLResourceManager>,
+    encoder: NvEncoder<NvEncoderGLResourceManager>,
 }
 
-impl_nvencoder_wrapper_type!(NvEncoderGL, NvEncoderGLResourceManager);
+impl Deref for NvEncoderGL {
+    type Target = NvEncoder<NvEncoderGLResourceManager>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.encoder
+    }
+}
+
+impl DerefMut for NvEncoderGL {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.encoder
+    }
+}
 
 impl NvEncoderExt for NvEncoderGL {
     fn encode_frame_from_data(
@@ -21,13 +34,12 @@ impl NvEncoderExt for NvEncoderGL {
         pic_params: Option<NV_ENC_PIC_PARAMS>,
         output_packet_buffer: &mut Vec<&[u8]>,
     ) -> NvEncoderResult<()> {
-        let encoder_input_frame = self.get_next_input_frame();
-        let resource = encoder_input_frame.input_ptr_as_gltex();
+        let resource = self.get_next_input_resource();
         // TODO: remove these hacks
         unsafe {
-            gl::BindTexture((*resource).target, (*resource).texture);
+            gl::BindTexture(resource.target, resource.texture);
             gl::TexSubImage2D(
-                (*resource).target,
+                resource.target,
                 0,                         // level
                 0,                         // x offset
                 0,                         // y offset
@@ -37,7 +49,7 @@ impl NvEncoderExt for NvEncoderGL {
                 gl::UNSIGNED_BYTE,         // type
                 data.as_ptr() as *const _, // data
             );
-            gl::BindTexture((*resource).target, 0);
+            gl::BindTexture(resource.target, 0);
         }
 
         self.encode_frame(output_packet_buffer, pic_params)
@@ -58,7 +70,7 @@ impl NvEncoderGL {
     ) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
-            encoder: NvEncoderBase::new(
+            encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
                 width,
@@ -72,7 +84,7 @@ impl NvEncoderGL {
     }
 }
 
-impl NvEncoderBase<NvEncoderGLResourceManager> {
+impl NvEncoder<NvEncoderGLResourceManager> {
     fn release_gl_resources(&mut self) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Ok(());
@@ -99,11 +111,13 @@ impl NvEncoderBase<NvEncoderGLResourceManager> {
     }
 }
 
-pub(super) struct NvEncoderGLResourceManager {}
+pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
+    type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+
     fn allocate_input_buffers(
-        encoder: &mut NvEncoderBase<Self>,
+        encoder: &mut NvEncoder<Self>,
         num_input_buffers: u32,
     ) -> NvEncoderResult<()> {
         if !encoder.is_hw_encoder_initialized() {
@@ -166,7 +180,7 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
         Ok(())
     }
 
-    fn release_input_buffers(encoder: &mut NvEncoderBase<Self>) -> NvEncoderResult<()> {
+    fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> NvEncoderResult<()> {
         encoder.release_gl_resources()
     }
 }
