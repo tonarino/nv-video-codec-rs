@@ -14,9 +14,12 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL};
+use nv_video_codec::{
+    encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL},
+    guids::{EncodeCodec, EncodePreset},
+};
 use nv_video_codec_sys::{
-    guids, _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
+    _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
 };
 use simple_logger::SimpleLogger;
 
@@ -46,10 +49,10 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Gl
 
 fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
     let mut params = encoder.create_default_encoder_params(
-        guids::NV_ENC_CODEC_HEVC_GUID,
+        EncodeCodec::Hevc,
         // preset guid seems to have no real effect on the speed???
         // needs testing as well
-        guids::NV_ENC_PRESET_P3_GUID,
+        EncodePreset::P3,
         // can't really see a difference between ULTRA_LOW_LATENCY and LOW_LATENCY???
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation

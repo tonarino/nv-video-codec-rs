@@ -17,3 +17,4 @@ extern crate parking_lot;
 pub mod common;
 pub mod decoder;
 pub mod encoder;
+pub mod guids;
