@@ -16,11 +16,12 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, EncodePicFlags, EncodeRateControlMode, NvEncoderExt, NvEncoderGL,
+        types::BufferFormat, EncodePicFlags, EncodeRateControlMode, EncodeTuningInfo, NvEncoderExt,
+        NvEncoderGL,
     },
     guids::{EncodeCodec, EncodePreset},
 };
-use nv_video_codec_sys::{NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO};
+use nv_video_codec_sys::NV_ENC_PIC_PARAMS;
 use simple_logger::SimpleLogger;
 
 struct GlEncoderContext {
@@ -56,7 +57,7 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         // can't really see a difference between ULTRA_LOW_LATENCY and LOW_LATENCY???
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
-        NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
+        EncodeTuningInfo::UltraLowLatency,
     )?;
     params.frameRateNum = 60;
     unsafe {
