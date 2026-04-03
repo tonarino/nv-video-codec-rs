@@ -1,4 +1,5 @@
 use super::nvencoder::{NV_ENC_CONFIG_VER, NV_ENC_PRESET_CONFIG_VER};
+use crate::guids::EncodeProfile;
 use nv_video_codec_sys::{
     _NV_ENC_MV_PRECISION, NV_ENC_CONFIG, NV_ENC_PARAMS_FRAME_FIELD_MODE, NV_ENC_PRESET_CONFIG,
 };
@@ -12,7 +13,7 @@ impl CustomDefault for NV_ENC_CONFIG {
         Self {
             version: NV_ENC_CONFIG_VER,
             frameFieldMode: NV_ENC_PARAMS_FRAME_FIELD_MODE::NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME,
-            profileGUID: Default::default(),
+            profileGUID: EncodeProfile::AutoSelect.as_guid(),
             gopLength: Default::default(),
             frameIntervalP: Default::default(),
             monoChromeEncoding: Default::default(),

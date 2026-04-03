@@ -13,7 +13,10 @@ use nv_video_codec_sys::{
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
 };
 
-use crate::encoder::defaults::CustomDefault;
+use crate::{
+    encoder::defaults::CustomDefault,
+    guids::{EncodeCodec, EncodePreset},
+};
 
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
@@ -374,8 +377,8 @@ where
 
     pub fn create_default_encoder_params(
         &mut self,
-        codec_guid: GUID,
-        preset_guid: GUID,
+        codec: EncodeCodec,
+        preset: EncodePreset,
         tuning_info: NV_ENC_TUNING_INFO,
     ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
         if self.encoder_handle.is_null() {
@@ -391,8 +394,8 @@ where
         // nvpipe doesn't even use this
         let mut initialize_params = NV_ENC_INITIALIZE_PARAMS {
             version: NV_ENC_INITIALIZE_PARAMS_VER, // TODO(efyang) actual const func for this
-            encodeGUID: codec_guid,
-            presetGUID: preset_guid,
+            encodeGUID: codec.as_guid(),
+            presetGUID: preset.as_guid(),
             encodeWidth: self.width,
             encodeHeight: self.height,
             darWidth: self.width,
@@ -419,8 +422,8 @@ where
                 .nvEncGetEncodePresetConfig
                 .expect("Invalid nvEncGetEncodePresetConfig ptr")(
                 self.encoder_handle as *mut _,
-                codec_guid,
-                preset_guid,
+                codec.as_guid(),
+                preset.as_guid(),
                 &mut preset_config,
             )
             .into_nvenc_result()?;
@@ -444,8 +447,8 @@ where
             unsafe {
                 self.nv_encode_api_function_list.nvEncGetEncodePresetConfigEx.unwrap()(
                     self.encoder_handle as *mut _,
-                    codec_guid,
-                    preset_guid,
+                    codec.as_guid(),
+                    preset.as_guid(),
                     tuning_info,
                     &mut preset_config,
                 )
