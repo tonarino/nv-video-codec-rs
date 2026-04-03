@@ -3,7 +3,7 @@ use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoderError, NvEncoderResult,
 };
-use crate::encoder::{defaults::CustomDefault, EncodePicFlags};
+use crate::encoder::{defaults::CustomDefault, EncodePicFlags, EncodeRateControlMode};
 use nv_video_codec_sys::{
     guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
     _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION,
@@ -11,9 +11,9 @@ use nv_video_codec_sys::{
     NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER,
     NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE,
     NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS,
-    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE,
-    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
-    NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS,
+    NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
+    NV_ENC_TUNING_INFO,
 };
 use std::marker::PhantomData;
 
@@ -187,7 +187,7 @@ where
             } else {
                 self.encode_config.version = NV_ENC_CONFIG_VER;
                 self.encode_config.rcParams.rateControlMode =
-                    NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+                    EncodeRateControlMode::ConstantQp.into();
                 self.encode_config.rcParams.constQP =
                     _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
             }
@@ -428,7 +428,7 @@ where
             (*initialize_params.encodeConfig).frameIntervalP = 1;
             (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
             (*initialize_params.encodeConfig).rcParams.rateControlMode =
-                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+                EncodeRateControlMode::ConstantQp.into();
         }
 
         if !self.motion_estimation_only {
@@ -451,8 +451,7 @@ where
             }
         } else {
             self.encode_config.version = NV_ENC_CONFIG_VER;
-            self.encode_config.rcParams.rateControlMode =
-                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+            self.encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
             self.encode_config.rcParams.constQP =
                 NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }

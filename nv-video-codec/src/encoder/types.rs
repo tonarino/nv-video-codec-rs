@@ -1,6 +1,6 @@
 use super::{NvEncError, NvEncoderError};
 use ffi::_NV_ENC_BUFFER_FORMAT;
-use nv_video_codec_sys::{self as ffi, NV_ENC_PIC_FLAGS};
+use nv_video_codec_sys::{self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS};
 use std::ffi::c_uint;
 
 ffi_enum! {
@@ -103,5 +103,21 @@ bitflags! {
         const FORCE_IDR = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0;
         const SEQUENCE_HEADER = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0;
         const END_OF_STREAM = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0;
+    }
+}
+
+pub enum EncodeRateControlMode {
+    ConstantQp,
+    VariableBitrate,
+    ConstantBitrate,
+}
+
+impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
+    fn from(value: EncodeRateControlMode) -> Self {
+        match value {
+            EncodeRateControlMode::ConstantQp => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP,
+            EncodeRateControlMode::VariableBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_VBR,
+            EncodeRateControlMode::ConstantBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR,
+        }
     }
 }

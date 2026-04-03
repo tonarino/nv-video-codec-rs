@@ -14,8 +14,10 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::encoder::{types::BufferFormat, EncodePicFlags, NvEncoderExt, NvEncoderGL};
-use nv_video_codec_sys::{guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO};
+use nv_video_codec::encoder::{
+    types::BufferFormat, EncodePicFlags, EncodeRateControlMode, NvEncoderExt, NvEncoderGL,
+};
+use nv_video_codec_sys::{guids, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO};
 use simple_logger::SimpleLogger;
 
 struct GlEncoderContext {
@@ -56,7 +58,7 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
     params.frameRateNum = 60;
     unsafe {
         (*params.encodeConfig).rcParams.rateControlMode =
-            NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR;
+            EncodeRateControlMode::ConstantBitrate.into();
         // (*params.encodeConfig).rcParams.multiPass =
         //     NV_ENC_MULTI_PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION;
         (*params.encodeConfig).rcParams.lowDelayKeyFrameScale = 1;
