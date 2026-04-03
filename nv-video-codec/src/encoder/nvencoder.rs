@@ -1,24 +1,21 @@
 #![allow(unused_variables, dead_code)]
-use std::marker::PhantomData;
-
-use nv_video_codec_sys::{
-    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_FLAGS,
-    _NV_ENC_PIC_STRUCT, _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
-    NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
-    NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
-    NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
-    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
-    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
-    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
-};
-
-use crate::encoder::defaults::CustomDefault;
-
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoderError, NvEncoderResult,
 };
+use crate::encoder::{defaults::CustomDefault, EncodePicFlags};
+use nv_video_codec_sys::{
+    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
+    _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION,
+    NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS,
+    NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER,
+    NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE,
+    NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS,
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PARAMS_RC_MODE,
+    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
+    NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
+};
+use std::marker::PhantomData;
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -858,7 +855,7 @@ where
     fn send_eos(&mut self) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0,
+            encodePicFlags: EncodePicFlags::END_OF_STREAM.bits(),
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,

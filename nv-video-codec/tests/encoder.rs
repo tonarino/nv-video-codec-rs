@@ -14,10 +14,8 @@ use std::{
 
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
-use nv_video_codec::encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL};
-use nv_video_codec_sys::{
-    guids, _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
-};
+use nv_video_codec::encoder::{types::BufferFormat, EncodePicFlags, NvEncoderExt, NvEncoderGL};
+use nv_video_codec_sys::{guids, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO};
 use simple_logger::SimpleLogger;
 
 struct GlEncoderContext {
@@ -147,14 +145,11 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
+    // force intra-frame and force per-frame metadata
+    let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
-        let params = NV_ENC_PIC_PARAMS {
-            // force intra-frame and force per-frame metadata
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0
-                | _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0,
-            ..Default::default()
-        };
+        let params = NV_ENC_PIC_PARAMS { encodePicFlags: pic_flags.bits(), ..Default::default() };
         encoder.encode_frame_from_data(data, width, height, Some(params), &mut packet)?;
 
         frames_encoded += 1;

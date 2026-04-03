@@ -1,7 +1,7 @@
-use ffi::_NV_ENC_BUFFER_FORMAT;
-use nv_video_codec_sys as ffi;
-
 use super::{NvEncError, NvEncoderError};
+use ffi::_NV_ENC_BUFFER_FORMAT;
+use nv_video_codec_sys::{self as ffi, NV_ENC_PIC_FLAGS};
+use std::ffi::c_uint;
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
@@ -88,5 +88,20 @@ impl BufferFormat {
             Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
             _ => Err(NvEncError::InvalidParam.into()),
         }
+    }
+}
+
+bitflags! {
+    /// - `FORCE_INTRA`     Encode the current picture as an Intra picture.
+    /// - `FORCE_IDR`       Encode the current picture as an IDR picture.  This flag is only valid
+    ///                     when Picture type decision (PTD) is taken by the encoder.
+    /// - `SEQUENCE_HEADER` Write the sequence and picture header in encoded bitstream of the
+    ///                     current picture.
+    /// - `END_OF_STREAM`   Indicates end of the input stream.
+    pub struct EncodePicFlags: c_uint {
+        const FORCE_INTRA = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEINTRA.0;
+        const FORCE_IDR = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0;
+        const SEQUENCE_HEADER = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0;
+        const END_OF_STREAM = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0;
     }
 }
