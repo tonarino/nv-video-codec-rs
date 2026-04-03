@@ -3,7 +3,9 @@ use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoderError, NvEncoderResult,
 };
-use crate::encoder::{defaults::CustomDefault, EncodePicFlags, EncodeRateControlMode};
+use crate::encoder::{
+    defaults::CustomDefault, EncodePicFlags, EncodeRateControlMode, EncodeTuningInfo,
+};
 use nv_video_codec_sys::{
     guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
     _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION,
@@ -13,7 +15,6 @@ use nv_video_codec_sys::{
     NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS,
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS,
     NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
-    NV_ENC_TUNING_INFO,
 };
 use std::marker::PhantomData;
 
@@ -373,7 +374,7 @@ where
         &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
-        tuning_info: NV_ENC_TUNING_INFO,
+        tuning_info: EncodeTuningInfo,
     ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
@@ -432,7 +433,7 @@ where
         }
 
         if !self.motion_estimation_only {
-            initialize_params.tuningInfo = tuning_info;
+            initialize_params.tuningInfo = tuning_info.into();
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
                 presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
@@ -443,7 +444,7 @@ where
                     self.encoder_handle as *mut _,
                     codec_guid,
                     preset_guid,
-                    tuning_info,
+                    tuning_info.into(),
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;

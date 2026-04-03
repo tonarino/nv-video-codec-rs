@@ -1,6 +1,8 @@
 use super::{NvEncError, NvEncoderError};
 use ffi::_NV_ENC_BUFFER_FORMAT;
-use nv_video_codec_sys::{self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS};
+use nv_video_codec_sys::{
+    self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
+};
 use std::ffi::c_uint;
 
 ffi_enum! {
@@ -106,6 +108,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EncodeRateControlMode {
     ConstantQp,
     VariableBitrate,
@@ -118,6 +121,28 @@ impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
             EncodeRateControlMode::ConstantQp => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP,
             EncodeRateControlMode::VariableBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_VBR,
             EncodeRateControlMode::ConstantBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR,
+        }
+    }
+}
+
+/// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EncodeTuningInfo {
+    HighQuality,
+    LowLatency,
+    UltraLowLatency,
+    Lossless,
+}
+
+impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
+    fn from(value: EncodeTuningInfo) -> Self {
+        match value {
+            EncodeTuningInfo::HighQuality => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_HIGH_QUALITY,
+            EncodeTuningInfo::LowLatency => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
+            EncodeTuningInfo::UltraLowLatency => {
+                NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY
+            },
+            EncodeTuningInfo::Lossless => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOSSLESS,
         }
     }
 }
