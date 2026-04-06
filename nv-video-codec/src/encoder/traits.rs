@@ -1,5 +1,4 @@
-use crate::encoder::NvEncoderError;
-use nv_video_codec_sys::NV_ENC_PIC_PARAMS;
+use crate::encoder::{EncodePicFlags, NvEncoderError};
 
 pub type NvEncoderResult<T> = Result<T, NvEncoderError>;
 
@@ -10,7 +9,7 @@ pub trait NvEncoderExt {
         data: &[u8],
         width: u32,
         height: u32,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_params: EncodePicFlags,
         output_packet_buffer: &mut Vec<&[u8]>,
     ) -> NvEncoderResult<()>;
 }

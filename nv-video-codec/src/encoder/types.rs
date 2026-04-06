@@ -3,7 +3,6 @@ use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
     self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
 };
-use std::ffi::c_uint;
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
@@ -100,7 +99,7 @@ bitflags! {
     /// - `SEQUENCE_HEADER` Write the sequence and picture header in encoded bitstream of the
     ///                     current picture.
     /// - `END_OF_STREAM`   Indicates end of the input stream.
-    pub struct EncodePicFlags: c_uint {
+    pub struct EncodePicFlags: u32 {
         const FORCE_INTRA = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEINTRA.0;
         const FORCE_IDR = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0;
         const SEQUENCE_HEADER = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0;

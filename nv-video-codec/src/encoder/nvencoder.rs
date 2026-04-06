@@ -266,7 +266,7 @@ where
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -279,7 +279,7 @@ where
         let encode_status = self.do_encode(
             self.mapped_input_buffers[buffer_index as usize],
             self.bitstream_output_buffer[buffer_index as usize],
-            pic_params,
+            pic_flags,
         );
 
         match encode_status {
@@ -759,7 +759,7 @@ where
         &mut self,
         input_buffer: NV_ENC_INPUT_PTR,
         output_buffer: NV_ENC_OUTPUT_PTR,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -774,7 +774,8 @@ where
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
-            ..pic_params.unwrap_or_default()
+            encodePicFlags: pic_flags.bits(),
+            ..Default::default()
         };
 
         unsafe {

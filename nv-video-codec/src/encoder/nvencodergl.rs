@@ -2,9 +2,8 @@ use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
     NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
 };
-use nv_video_codec_sys::{
-    _NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_PIC_PARAMS,
-};
+use crate::encoder::EncodePicFlags;
+use nv_video_codec_sys::{_NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX};
 use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
@@ -31,7 +30,7 @@ impl NvEncoderExt for NvEncoderGL {
         data: &[u8],
         width: u32,
         height: u32,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
         output_packet_buffer: &mut Vec<&[u8]>,
     ) -> NvEncoderResult<()> {
         let resource = self.get_next_input_resource();
@@ -52,7 +51,7 @@ impl NvEncoderExt for NvEncoderGL {
             gl::BindTexture(resource.target, 0);
         }
 
-        self.encode_frame(output_packet_buffer, pic_params)
+        self.encode_frame(output_packet_buffer, pic_flags)
     }
 }
 
