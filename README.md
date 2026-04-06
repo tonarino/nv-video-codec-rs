@@ -21,7 +21,7 @@ The main interface is provided by `NvEncoder<ResourceManager>`.
 
 ```rust
 impl<ResourceManager> NvEncoder<ResourceManager> {
-    pub fn create_encoder(&mut self, encoder_params: &NV_ENC_INITIALIZE_PARAMS) -> NvEncoderResult<()>;
+    pub fn create_encoder(&mut self, encoder_params: &NvEncoderParams) -> NvEncoderResult<()>;
     pub fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
     pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource;
@@ -31,12 +31,6 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
         pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()>;
     pub fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()>;
-    pub fn create_default_encoder_params(
-        &mut self,
-        codec_guid: GUID,
-        preset_guid: GUID,
-        tuning_info: EncodeTuningInfo,
-    ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS>;
 }
 ```
 

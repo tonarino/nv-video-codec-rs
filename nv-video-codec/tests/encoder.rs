@@ -7,21 +7,20 @@ extern crate simple_logger;
 #[macro_use]
 mod utils;
 
-use std::{
-    io::Write,
-    time::{Duration, Instant},
-};
-
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, EncodePicFlags, EncodeRateControlMode, EncodeTuningInfo, NvEncoderExt,
-        NvEncoderGL,
+        types::BufferFormat, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
+        EncodeTuningInfo, NvEncoderExt, NvEncoderGL, NvEncoderParams,
     },
     guids::{EncodeCodec, EncodePreset},
 };
 use simple_logger::SimpleLogger;
+use std::{
+    io::Write,
+    time::{Duration, Instant},
+};
 
 struct GlEncoderContext {
     encoder: NvEncoderGL,
@@ -48,31 +47,28 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Gl
 }
 
 fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
-    let mut params = encoder.create_default_encoder_params(
-        EncodeCodec::Hevc,
+    let params = NvEncoderParams {
+        codec: EncodeCodec::Hevc,
         // preset guid seems to have no real effect on the speed???
         // needs testing as well
-        EncodePreset::P3,
+        preset: EncodePreset::P3,
         // can't really see a difference between ULTRA_LOW_LATENCY and LOW_LATENCY???
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
-        EncodeTuningInfo::UltraLowLatency,
-    )?;
-    params.frameRateNum = 60;
-    unsafe {
-        (*params.encodeConfig).rcParams.rateControlMode =
-            EncodeRateControlMode::ConstantBitrate.into();
-        // (*params.encodeConfig).rcParams.multiPass =
-        //     NV_ENC_MULTI_PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION;
-        (*params.encodeConfig).rcParams.lowDelayKeyFrameScale = 1;
-        (*params.encodeConfig).rcParams.averageBitRate = 13 * 1000 * 1000;
-        (*params.encodeConfig).rcParams.vbvBufferSize = encoder.get_frame_size()?;
-        (*params.encodeConfig).rcParams.vbvInitialDelay = encoder.get_frame_size()?;
-        (*params.encodeConfig).rcParams.set_enableAQ(1);
-        // required for use with ffmpeg, not with nvcodec
-        (*params.encodeConfig).encodeCodecConfig.hevcConfig.set_repeatSPSPPS(1);
-    }
+        tuning_info: EncodeTuningInfo::UltraLowLatency,
+        frame_rate: 60,
+        repeat_spspps: true,
+        rate_control: EncodeRateControl {
+            mode: EncodeRateControlMode::ConstantBitrate,
+            low_delay_key_frame_scale: 1,
+            average_bit_rate: 13_000_000,
+            enable_aq: true,
+            // required for use with ffmpeg, not with nvcodec
+        },
+    };
+
     encoder.create_encoder(&params)?;
+
     Ok(())
 }
 

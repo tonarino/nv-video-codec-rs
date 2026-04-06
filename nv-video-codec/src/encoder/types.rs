@@ -1,4 +1,5 @@
 use super::{NvEncError, NvEncoderError};
+use crate::guids::{EncodeCodec, EncodePreset};
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
     self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
@@ -143,4 +144,20 @@ impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
             EncodeTuningInfo::Lossless => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOSSLESS,
         }
     }
+}
+
+pub struct EncodeRateControl {
+    pub mode: EncodeRateControlMode,
+    pub low_delay_key_frame_scale: u8,
+    pub average_bit_rate: u32,
+    pub enable_aq: bool,
+}
+
+pub struct NvEncoderParams {
+    pub codec: EncodeCodec,
+    pub preset: EncodePreset,
+    pub tuning_info: EncodeTuningInfo,
+    pub frame_rate: u32,
+    pub repeat_spspps: bool,
+    pub rate_control: EncodeRateControl,
 }
