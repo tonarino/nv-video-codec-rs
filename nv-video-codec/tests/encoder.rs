@@ -58,13 +58,13 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         // needs testing on dev installation
         tuning_info: NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
         frame_rate: 60,
+        // required for use with ffmpeg, not with nvcodec
         repeat_spspps: true,
         rate_control: EncodeRateControl {
             mode: NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR,
             low_delay_key_frame_scale: 1,
             average_bit_rate: 13_000_000,
             enable_aq: true,
-            // required for use with ffmpeg, not with nvcodec
         },
     };
 
