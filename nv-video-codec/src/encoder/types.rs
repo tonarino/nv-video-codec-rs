@@ -1,7 +1,8 @@
 use ffi::_NV_ENC_BUFFER_FORMAT;
-use nv_video_codec_sys as ffi;
+use nv_video_codec_sys::{self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_TUNING_INFO};
 
 use super::{NvEncError, NvEncoderError};
+use crate::guids::{EncodeCodec, EncodePreset};
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
@@ -89,4 +90,22 @@ impl BufferFormat {
             _ => Err(NvEncError::InvalidParam.into()),
         }
     }
+}
+
+pub struct EncodeRateControl {
+    // TODO: replace by wrapped type
+    pub mode: NV_ENC_PARAMS_RC_MODE,
+    pub low_delay_key_frame_scale: u8,
+    pub average_bit_rate: u32,
+    pub enable_aq: bool,
+}
+
+pub struct NvEncoderParams {
+    pub codec: EncodeCodec,
+    pub preset: EncodePreset,
+    // TODO: replace by wrapped type
+    pub tuning_info: NV_ENC_TUNING_INFO,
+    pub frame_rate: u32,
+    pub repeat_spspps: bool,
+    pub rate_control: EncodeRateControl,
 }

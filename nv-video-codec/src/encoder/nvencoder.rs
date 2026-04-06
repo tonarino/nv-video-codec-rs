@@ -14,7 +14,7 @@ use nv_video_codec_sys::{
 };
 
 use crate::{
-    encoder::defaults::CustomDefault,
+    encoder::{defaults::CustomDefault, NvEncoderParams},
     guids::{EncodeCodec, EncodePreset},
 };
 
@@ -105,12 +105,31 @@ impl<ResourceManager> NvEncoder<ResourceManager>
 where
     ResourceManager: NvEncoderResourceManager + ?Sized,
 {
-    pub fn create_encoder(
-        &mut self,
-        encoder_params: &NV_ENC_INITIALIZE_PARAMS,
-    ) -> NvEncoderResult<()> {
+    pub fn create_encoder(&mut self, params: &NvEncoderParams) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
+        }
+
+        let mut encoder_params =
+            self.create_default_encoder_params(params.codec, params.preset, params.tuning_info)?;
+
+        encoder_params.frameRateNum = params.frame_rate;
+
+        unsafe {
+            (*encoder_params.encodeConfig).rcParams.rateControlMode = params.rate_control.mode;
+            (*encoder_params.encodeConfig).rcParams.lowDelayKeyFrameScale =
+                params.rate_control.low_delay_key_frame_scale;
+            (*encoder_params.encodeConfig).rcParams.averageBitRate =
+                params.rate_control.average_bit_rate;
+            (*encoder_params.encodeConfig).rcParams.vbvBufferSize = self.get_frame_size()?;
+            (*encoder_params.encodeConfig).rcParams.vbvInitialDelay = self.get_frame_size()?;
+            (*encoder_params.encodeConfig)
+                .rcParams
+                .set_enableAQ(params.rate_control.enable_aq as u32);
+            (*encoder_params.encodeConfig)
+                .encodeCodecConfig
+                .hevcConfig
+                .set_repeatSPSPPS(params.repeat_spspps as u32);
         }
 
         if encoder_params.encodeWidth == 0 || encoder_params.encodeHeight == 0 {
@@ -165,7 +184,7 @@ where
         }
 
         self.initialize_params =
-            NV_ENC_INITIALIZE_PARAMS { version: NV_ENC_INITIALIZE_PARAMS_VER, ..*encoder_params };
+            NV_ENC_INITIALIZE_PARAMS { version: NV_ENC_INITIALIZE_PARAMS_VER, ..encoder_params };
 
         if !encoder_params.encodeConfig.is_null() {
             self.encode_config = NV_ENC_CONFIG {
@@ -375,7 +394,7 @@ where
         }
     }
 
-    pub fn create_default_encoder_params(
+    fn create_default_encoder_params(
         &mut self,
         codec: EncodeCodec,
         preset: EncodePreset,
