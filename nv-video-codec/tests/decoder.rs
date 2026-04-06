@@ -205,28 +205,24 @@ fn run_torture_test(
 }
 
 #[test]
-#[cfg(feature = "torture")]
 fn decode_h265_3k_basic_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, None)
 }
 
 #[test]
-#[cfg(feature = "torture")]
 fn decode_h265_3k_device_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, None)
 }
 
 #[test]
-#[cfg(feature = "torture")]
 fn decode_h265_3k_device_framelock_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, None)
 }
 
 #[test]
-#[cfg(feature = "torture")]
 fn decode_h265_3k_device_torture_60fps() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     run_torture_test("decode_h265_3k_device_torture_60fps", data, 3088, 2076, true, Some(60.0))
