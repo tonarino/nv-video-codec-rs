@@ -110,27 +110,17 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        let mut encoder_params =
-            self.create_default_encoder_params(params.codec, params.preset, params.tuning_info)?;
+        let mut encode_config =
+            NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() };
 
-        encoder_params.frameRateNum = params.frame_rate;
+        let mut encoder_params = self.create_default_encoder_params(
+            params.codec,
+            params.preset,
+            params.tuning_info,
+            &mut encode_config,
+        )?;
 
-        unsafe {
-            (*encoder_params.encodeConfig).rcParams.rateControlMode = params.rate_control.mode;
-            (*encoder_params.encodeConfig).rcParams.lowDelayKeyFrameScale =
-                params.rate_control.low_delay_key_frame_scale;
-            (*encoder_params.encodeConfig).rcParams.averageBitRate =
-                params.rate_control.average_bit_rate;
-            (*encoder_params.encodeConfig).rcParams.vbvBufferSize = self.get_frame_size()?;
-            (*encoder_params.encodeConfig).rcParams.vbvInitialDelay = self.get_frame_size()?;
-            (*encoder_params.encodeConfig)
-                .rcParams
-                .set_enableAQ(params.rate_control.enable_aq as u32);
-            (*encoder_params.encodeConfig)
-                .encodeCodecConfig
-                .hevcConfig
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
-        }
+        Self::configure_encoder_params(&mut encoder_params, params, self.get_frame_size()?);
 
         if encoder_params.encodeWidth == 0 || encoder_params.encodeHeight == 0 {
             return Err(NvEncError::InvalidParam.into());
@@ -399,16 +389,11 @@ where
         codec: EncodeCodec,
         preset: EncodePreset,
         tuning_info: NV_ENC_TUNING_INFO,
+        encode_config: &mut NV_ENC_CONFIG,
     ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
         }
-
-        let encode_config =
-            NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() };
-        // NOTE: Leaking to have a stable address to point to in the `encodeConfig` field below.
-        // TODO(mbernat): Wrap these structs so that we can reduce the `unsafe` and pointer usage.
-        let encode_config = Box::leak(Box::new(encode_config));
 
         // nvpipe doesn't even use this
         let mut initialize_params = NV_ENC_INITIALIZE_PARAMS {
@@ -518,6 +503,31 @@ where
         }
 
         Ok(initialize_params)
+    }
+
+    fn configure_encoder_params(
+        encoder_params: &mut NV_ENC_INITIALIZE_PARAMS,
+        params: &NvEncoderParams,
+        frame_size: u32,
+    ) {
+        encoder_params.frameRateNum = params.frame_rate;
+
+        unsafe {
+            (*encoder_params.encodeConfig).rcParams.rateControlMode = params.rate_control.mode;
+            (*encoder_params.encodeConfig).rcParams.lowDelayKeyFrameScale =
+                params.rate_control.low_delay_key_frame_scale;
+            (*encoder_params.encodeConfig).rcParams.averageBitRate =
+                params.rate_control.average_bit_rate;
+            (*encoder_params.encodeConfig).rcParams.vbvBufferSize = frame_size;
+            (*encoder_params.encodeConfig).rcParams.vbvInitialDelay = frame_size;
+            (*encoder_params.encodeConfig)
+                .rcParams
+                .set_enableAQ(params.rate_control.enable_aq as u32);
+            (*encoder_params.encodeConfig)
+                .encodeCodecConfig
+                .hevcConfig
+                .set_repeatSPSPPS(params.repeat_spspps as u32);
+        }
     }
 
     fn get_initialize_params(&self) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
