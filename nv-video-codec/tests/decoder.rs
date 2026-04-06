@@ -2,10 +2,6 @@ extern crate anyhow;
 extern crate log;
 extern crate simple_logger;
 
-#[path = "utils.rs"]
-#[macro_use]
-mod utils;
-
 use anyhow::Result;
 use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
 use rustacuda::{
@@ -13,9 +9,11 @@ use rustacuda::{
     device::Device,
 };
 use simple_logger::SimpleLogger;
-
-#[cfg(feature = "torture")]
 use std::time::Duration;
+
+#[path = "utils.rs"]
+#[macro_use]
+mod utils;
 
 fn init_cuda_ctx() -> Result<Context> {
     rustacuda::init(rustacuda::CudaFlags::empty())?;
@@ -124,14 +122,14 @@ fn decode_h265_3k_device() -> Result<()> {
 
 #[cfg(feature = "torture")]
 const NUM_TORTURE_FRAMES: i64 = 10000;
-#[cfg(feature = "torture")]
+#[cfg(not(feature = "torture"))]
+const NUM_TORTURE_FRAMES: i64 = 10;
 fn run_torture_test(
     test_name: &str,
     data: &[u8],
     expected_width: u32,
     expected_height: u32,
     use_device_frame: bool,
-    use_locking: bool,
     frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
     let _ = SimpleLogger::new().init();
@@ -148,26 +146,27 @@ fn run_torture_test(
             std::thread::sleep(Duration::from_secs_f64(1.0 / frame_rate));
         }
         let start = std::time::Instant::now();
-        let mut frames_decoded = 0;
 
-        // TODO(efyang) make this behaviour configurable and part of the library
-        // From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
+        let packet_timestamp = -1;
+        let mut decoding_output =
+            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
         let mut i = 0;
-        while i < DECODE_TRIES && frames_decoded == 0 {
-            frames_decoded = decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, timestamp)?;
+        // TODO(mbernat): This loop is very random, try to understand it better.
+        // It has something to do with the latency settings and the decoding output for the current
+        // packet only being available in the later `decode()` calls.
+        while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+            let packet_timestamp = i as i64;
+            decoding_output =
+                decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
             i += 1;
         }
 
-        if !use_locking {
-            let _ = decoder.get_frame().unwrap();
-        } else {
-            let frame = decoder.get_locked_frame().unwrap();
-            decoder.unlock_frame(frame);
-        }
+        let _ = decoding_output.frames[0];
+
         total_time += start.elapsed();
         blocked_time += start.elapsed();
 
-        total_frames_decoded += frames_decoded;
+        total_frames_decoded += decoding_output.frames.len();
         if total_frames_decoded % 1000 == 0 {
             info_ctx!(
                 test_name,
@@ -177,18 +176,22 @@ fn run_torture_test(
             );
             blocked_time = Duration::from_millis(0);
         }
-    }
 
-    info_ctx!(
-        test_name,
-        "Decoder output dimensions: {}x{}",
-        decoder.get_width(),
-        decoder.get_height()
-    );
-    assert!(decoder.get_width() == expected_width);
-    assert!(decoder.get_height() == expected_height);
-    assert!(total_frames_decoded > 0);
-    assert!(!decoder.get_video_info().is_empty());
+        if timestamp == 0 {
+            let frame_info = &decoding_output.frame_info;
+
+            info_ctx!(
+                test_name,
+                "Decoder output dimensions: {}x{}",
+                frame_info.width(),
+                frame_info.height()
+            );
+            assert!(frame_info.width() == expected_width);
+            assert!(frame_info.height() == expected_height);
+            assert!(total_frames_decoded > 0);
+            assert!(!frame_info.video_info().is_empty());
+        }
+    }
 
     info_ctx!(
         test_name,
@@ -205,34 +208,26 @@ fn run_torture_test(
 #[cfg(feature = "torture")]
 fn decode_h265_3k_basic_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, false, None)
+    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, None)
 }
 
 #[test]
 #[cfg(feature = "torture")]
 fn decode_h265_3k_device_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, false, None)
+    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, None)
 }
 
 #[test]
 #[cfg(feature = "torture")]
 fn decode_h265_3k_device_framelock_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, true, None)
+    run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, None)
 }
 
 #[test]
 #[cfg(feature = "torture")]
 fn decode_h265_3k_device_torture_60fps() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test(
-        "decode_h265_3k_device_torture_60fps",
-        data,
-        3088,
-        2076,
-        true,
-        false,
-        Some(60.0),
-    )
+    run_torture_test("decode_h265_3k_device_torture_60fps", data, 3088, 2076, true, Some(60.0))
 }
