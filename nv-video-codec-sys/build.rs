@@ -1,4 +1,3 @@
-use bindgen;
 use std::{env, fs, path::PathBuf};
 
 const COMMON_CUDA_PATHS: &[&str] = &[
