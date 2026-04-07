@@ -15,18 +15,6 @@ The SDK libraries are available in the official `nvidia-utils` package.
 sudo pacman -S nvidia-utils
 ```
 
-The SDK headers can be obtained through a modified AUR
-[`nvidia-sdk`](https://aur.archlinux.org/packages/nvidia-sdk) package that is provided here.
-Its building is a bit involved as it requires an nvidia account to download the Video Codec SDK
-from an [archive](https://developer.nvidia.com/video-codec-sdk-archive).
-
-```
-cd nvidia-sdk
-# download Video_Codec_SDK_11.0.10.zip and place it into nvidia-sdk
-makepkg
-sudo pacman -U nvidia-sdk-11.0.10-1-any.pkg.tar.zst
-```
-
 ## Safe bindings overview
 
 ### Encoding
