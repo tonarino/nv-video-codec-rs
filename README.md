@@ -3,6 +3,18 @@
 This project wraps NVIDIA Video Codec SDK 11.0 for use in Rust. Both unsafe FFI and safe
 higher-level bindings are provided.
 
+## Setup
+
+The project requires the Video Codec SDK to be installed.
+
+### Arch Linux
+
+The SDK libraries are available in the official `nvidia-utils` package.
+
+```
+sudo pacman -S nvidia-utils
+```
+
 ## Safe bindings overview
 
 ### Encoding

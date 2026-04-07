@@ -1,8 +1,6 @@
-extern crate bindgen;
-
 use std::{env, fs, path::PathBuf};
 
-static COMMON_CUDA_PATHS: &[&str] = &[
+const COMMON_CUDA_PATHS: &[&str] = &[
     "/opt/cuda",       // default Arch Linux location
     "/usr/local/cuda", // default Ubuntu location
 ];
@@ -34,14 +32,9 @@ fn main() {
         println!("cargo:rustc-link-search={}/lib64", p)
     }
 
-    let nvcodec_dir = env::current_dir().unwrap().join("Video_Codec_SDK_11.0.10/Samples/NvCodec");
-
     let build_dir = out_dir().join("build");
     fs::create_dir_all(&build_dir).expect("couldn't create cmake build dir");
 
-    println!("cargo:rerun-if-changed={}", nvcodec_dir.display());
-    println!("cargo:rustc-link-search=Video_Codec_SDK_11.0.10/Lib/linux/stubs/x86_64");
-    println!("cargo:rustc-link-lib=dylib=cuda");
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=nvcuvid");
     println!("cargo:rustc-link-lib=dylib=nvidia-encode");
@@ -66,8 +59,6 @@ fn main() {
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
-        .clang_arg("-IVideo_Codec_SDK_11.0.10/Interface")
-        // .clang_arg("-IVideo_Codec_SDK_11.0.10/Samples/Utils")
         .clang_args(&["-x", "c++"])
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
         .constified_enum_module("CUvideopacketflags")
