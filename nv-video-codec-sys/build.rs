@@ -5,8 +5,6 @@ const COMMON_CUDA_PATHS: &[&str] = &[
     "/usr/local/cuda", // default Ubuntu location
 ];
 
-const NV_CODEC_PATH: &str = "/usr/include/nvidia-sdk";
-
 fn find_cuda_dir(env_key: &'static str) -> PathBuf {
     if let Some(val) = env::var_os(env_key) {
         return PathBuf::from(&val);
@@ -61,7 +59,6 @@ fn main() {
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
-        .clang_arg(format!("-I{NV_CODEC_PATH}"))
         .clang_args(&["-x", "c++"])
         .clang_arg(format!("-I{}", cuda_include.to_string_lossy()))
         .constified_enum_module("CUvideopacketflags")
