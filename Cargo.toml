@@ -9,4 +9,4 @@ edition = "2018"
 repository = "https://github.com/tonarino/nv-video-codec-rs"
 homepage = "https://github.com/tonarino/nv-video-codec-rs"
 readme = "README.md"
-keywords = ["encoding", "decoding", "bindings", "nvidia", "cuda"]
+keywords = ["video", "encoding", "decoding", "bindings", "nvidia", "cuda"]
