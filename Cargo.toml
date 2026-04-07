@@ -1,2 +1,12 @@
 [workspace]
 members = ["nv-video-codec", "nv-video-codec-sys"]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Edward Yang <edward.yang6771@gmail.com>", "Brian Schwind <brianmschwind@gmail.com>", "Marek Bernat <marek.bernat@gmail.com>"]
+license = "MIT"
+edition = "2018"
+repository = "https://github.com/tonarino/nv-video-codec-rs"
+homepage = "https://github.com/tonarino/nv-video-codec-rs"
+readme = "README.md"
+keywords = ["encoding", "decoding", "bindings", "nvidia", "cuda"]
