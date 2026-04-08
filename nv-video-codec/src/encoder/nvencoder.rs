@@ -57,8 +57,9 @@ pub struct Device {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
+// TODO(mbernat): Make private and expose with a proper interface
 #[repr(C)]
-pub(crate) struct Input {
+pub struct Input {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
@@ -1038,10 +1039,12 @@ where
 // TODO: clean this struct up
 #[derive(Debug)]
 pub struct NvEncInputFrame {
-    pub(super) input_ptr: *mut Input, // Originally a void pointer
+    // TODO(mbernat): Make private and expose with a proper interface
+    pub input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],
     num_chroma_planes: u32,
-    pitch: u32,
+    // TODO(mbernat): Make private and expose with a proper interface
+    pub pitch: u32,
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
