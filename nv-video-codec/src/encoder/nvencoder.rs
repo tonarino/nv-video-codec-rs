@@ -109,17 +109,18 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        let mut encode_config =
-            NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() };
+        let (mut encoder_params, mut encode_config) = self
+            .create_default_encoder_params_and_config(
+                params.codec,
+                params.preset,
+                params.tuning_info,
+            )?;
 
-        let mut encoder_params = self.create_default_encoder_params(
-            params.codec,
-            params.preset,
-            params.tuning_info,
-            &mut encode_config,
-        )?;
+        encoder_params.frameRateNum = params.frame_rate;
 
-        Self::configure_encoder_params(&mut encoder_params, params, self.get_frame_size()?);
+        params.apply_to_encode_config(self.get_frame_size()?, &mut encode_config);
+
+        encoder_params.encodeConfig = &raw mut encode_config;
 
         if encoder_params.encodeWidth == 0 || encoder_params.encodeHeight == 0 {
             return Err(NvEncError::InvalidParam.into());
@@ -143,7 +144,8 @@ where
 
             if encoder_params.encodeGUID == guids::NV_ENC_CODEC_H264_GUID
                 && matches!(self.buffer_format, BufferFormat::YUV444)
-                && (*encoder_params.encodeConfig).encodeCodecConfig.h264Config.chromaFormatIDC != 3
+                && (*encoder_params.encodeConfig).encodeCodecConfig.h264Config.chromaFormatIDC
+                    != 3
             {
                 return Err(NvEncError::InvalidParam.into());
             }
@@ -164,7 +166,10 @@ where
                 }
 
                 if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT)
-                    && (*encoder_params.encodeConfig).encodeCodecConfig.hevcConfig.chromaFormatIDC()
+                    && (*encoder_params.encodeConfig)
+                        .encodeCodecConfig
+                        .hevcConfig
+                        .chromaFormatIDC()
                         != 3
                 {
                     return Err(NvEncError::InvalidParam.into());
@@ -383,13 +388,12 @@ where
         }
     }
 
-    fn create_default_encoder_params(
+    fn create_default_encoder_params_and_config(
         &mut self,
         codec: EncodeCodec,
         preset: EncodePreset,
         tuning_info: EncodeTuningInfo,
-        encode_config: &mut NV_ENC_CONFIG,
-    ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
+    ) -> NvEncoderResult<(NV_ENC_INITIALIZE_PARAMS, NV_ENC_CONFIG)> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
         }
@@ -406,7 +410,6 @@ where
             frameRateNum: 30, // TODO(efyang): possible optimization?
             frameRateDen: 1,
             enablePTD: 1,
-            encodeConfig: &raw mut *encode_config,
             maxEncodeWidth: self.width,
             maxEncodeHeight: self.height,
             ..Default::default()
@@ -420,6 +423,7 @@ where
             presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
             ..CustomDefault::default()
         };
+
         unsafe {
             self.nv_encode_api_function_list
                 .nvEncGetEncodePresetConfig
@@ -432,13 +436,10 @@ where
             .into_nvenc_result()?;
         }
 
-        unsafe {
-            *initialize_params.encodeConfig = preset_config.presetCfg;
-            (*initialize_params.encodeConfig).frameIntervalP = 1;
-            (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
-            (*initialize_params.encodeConfig).rcParams.rateControlMode =
-                EncodeRateControlMode::ConstantQp.into();
-        }
+        let mut encode_config = preset_config.presetCfg;
+        encode_config.frameIntervalP = 1;
+        encode_config.gopLength = NVENC_INFINITE_GOPLENGTH;
+        encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
 
         if !self.motion_estimation_only {
             initialize_params.tuningInfo = tuning_info.into();
@@ -456,77 +457,45 @@ where
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
-                *initialize_params.encodeConfig = preset_config.presetCfg;
+
+                encode_config = preset_config.presetCfg;
             }
         } else {
+            // TODO(mbernat): Why are we only modifying self here?
+
             self.encode_config.version = NV_ENC_CONFIG_VER;
             self.encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
             self.encode_config.rcParams.constQP =
                 NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }
 
-        unsafe {
-            if initialize_params.encodeGUID == guids::NV_ENC_CODEC_H264_GUID {
-                if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
-                    (*initialize_params.encodeConfig)
-                        .encodeCodecConfig
-                        .h264Config
-                        .chromaFormatIDC = 3;
-                }
-                (*initialize_params.encodeConfig).encodeCodecConfig.h264Config.idrPeriod =
-                    (*initialize_params.encodeConfig).gopLength;
-            } else if initialize_params.encodeGUID == guids::NV_ENC_CODEC_HEVC_GUID {
-                (*initialize_params.encodeConfig)
-                    .encodeCodecConfig
-                    .hevcConfig
-                    .set_pixelBitDepthMinus8(
-                        if matches!(
-                            self.buffer_format,
-                            BufferFormat::YUV420_10BIT | BufferFormat::YUV444_10BIT
-                        ) {
-                            2
-                        } else {
-                            0
-                        },
-                    );
-                if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
-                    (*initialize_params.encodeConfig)
-                        .encodeCodecConfig
-                        .hevcConfig
-                        .set_chromaFormatIDC(3);
-                }
-                (*initialize_params.encodeConfig).encodeCodecConfig.hevcConfig.idrPeriod =
-                    (*initialize_params.encodeConfig).gopLength;
+        if codec.as_guid() == guids::NV_ENC_CODEC_H264_GUID {
+            if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
+                encode_config.encodeCodecConfig.h264Config.chromaFormatIDC = 3;
+            }
+            encode_config.encodeCodecConfig.h264Config.idrPeriod = encode_config.gopLength;
+        } else if codec.as_guid() == guids::NV_ENC_CODEC_HEVC_GUID {
+            // SAFETY: We checked the codec is HEVC, so we can access the `hevcConfig` union field.
+            let hevc_config = unsafe { &mut encode_config.encodeCodecConfig.hevcConfig };
+
+            let bit_depth_minus_8 = if matches!(
+                self.buffer_format,
+                BufferFormat::YUV420_10BIT | BufferFormat::YUV444_10BIT
+            ) {
+                2
+            } else {
+                0
+            };
+
+            hevc_config.set_pixelBitDepthMinus8(bit_depth_minus_8);
+            hevc_config.idrPeriod = encode_config.gopLength;
+
+            if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT) {
+                hevc_config.set_chromaFormatIDC(3);
             }
         }
 
-        Ok(initialize_params)
-    }
-
-    fn configure_encoder_params(
-        encoder_params: &mut NV_ENC_INITIALIZE_PARAMS,
-        params: &NvEncoderParams,
-        frame_size: u32,
-    ) {
-        encoder_params.frameRateNum = params.frame_rate;
-
-        unsafe {
-            (*encoder_params.encodeConfig).rcParams.rateControlMode =
-                params.rate_control.mode.into();
-            (*encoder_params.encodeConfig).rcParams.lowDelayKeyFrameScale =
-                params.rate_control.low_delay_key_frame_scale;
-            (*encoder_params.encodeConfig).rcParams.averageBitRate =
-                params.rate_control.average_bit_rate;
-            (*encoder_params.encodeConfig).rcParams.vbvBufferSize = frame_size;
-            (*encoder_params.encodeConfig).rcParams.vbvInitialDelay = frame_size;
-            (*encoder_params.encodeConfig)
-                .rcParams
-                .set_enableAQ(params.rate_control.enable_aq as u32);
-            (*encoder_params.encodeConfig)
-                .encodeCodecConfig
-                .hevcConfig
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
-        }
+        Ok((initialize_params, encode_config))
     }
 
     fn get_initialize_params(&self) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
