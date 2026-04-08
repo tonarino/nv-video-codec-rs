@@ -189,6 +189,10 @@ impl<'a> DeviceSlice<'a> {
     fn into_raw_device_slice(self) -> RawDeviceSlice {
         RawDeviceSlice { ptr: self.ptr, len: self.len }
     }
+
+    pub fn ptr(&self) -> *const u8 {
+        self.ptr as *const u8
+    }
 }
 
 pub struct RawDeviceSlice {
