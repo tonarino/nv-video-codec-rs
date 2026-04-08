@@ -107,9 +107,10 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodeRateControlMode {
     ConstantQp,
+    #[default]
     VariableBitrate,
     ConstantBitrate,
 }
@@ -125,9 +126,10 @@ impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
 }
 
 /// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodeTuningInfo {
     HighQuality,
+    #[default]
     LowLatency,
     UltraLowLatency,
     Lossless,
@@ -146,6 +148,7 @@ impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct EncodeRateControl {
     pub mode: EncodeRateControlMode,
     pub low_delay_key_frame_scale: u8,
@@ -153,6 +156,7 @@ pub struct EncodeRateControl {
     pub enable_aq: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct NvEncoderParams {
     pub codec: EncodeCodec,
     pub preset: EncodePreset,
