@@ -107,14 +107,14 @@ where
             return Err(NvEncError::NoEncodeDevice.into());
         }
 
-        let (mut encoder_params, mut encode_config) = self
-            .create_default_encoder_params_and_config(
+        let (mut initialize_params, mut encode_config) = self
+            .create_default_initialize_params_and_config(
                 params.codec,
                 params.preset,
                 params.tuning_info,
             )?;
 
-        encoder_params.frameRateNum = params.frame_rate;
+        initialize_params.frameRateNum = params.frame_rate;
         params.apply_to_encode_config(self.get_frame_size()?, &mut encode_config);
 
         if self.width == 0 || self.height == 0 {
@@ -159,21 +159,21 @@ where
             },
         }
 
-        encoder_params.encodeConfig = &raw mut encode_config;
+        initialize_params.encodeConfig = &raw mut encode_config;
 
         unsafe {
             self.nv_encode_api_function_list.nvEncInitializeEncoder.unwrap()(
                 self.encoder_handle as *mut _,
-                &raw mut encoder_params,
+                &raw mut initialize_params,
             )
             .into_nvenc_result()?;
         }
 
         self.encoder_initialized = true;
-        self.width = encoder_params.encodeWidth;
-        self.height = encoder_params.encodeHeight;
-        self.max_encode_width = encoder_params.maxEncodeWidth;
-        self.max_encode_height = encoder_params.maxEncodeHeight;
+        self.width = initialize_params.encodeWidth;
+        self.height = initialize_params.encodeHeight;
+        self.max_encode_width = initialize_params.maxEncodeWidth;
+        self.max_encode_height = initialize_params.maxEncodeHeight;
 
         // TODO(efyang): convert this to a usize
         self.encoder_buffer = encode_config.frameIntervalP
@@ -336,7 +336,7 @@ where
         }
     }
 
-    fn create_default_encoder_params_and_config(
+    fn create_default_initialize_params_and_config(
         &mut self,
         codec: EncodeCodec,
         preset: EncodePreset,
