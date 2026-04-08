@@ -11,14 +11,14 @@ use crate::{
     guids::{EncodeCodec, EncodePreset},
 };
 use nv_video_codec_sys::{
-    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
-    _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION,
-    NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS,
-    NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER,
-    NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE,
-    NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS,
-    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS,
-    NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
+    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT, GUID,
+    NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH,
+    NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS, NV_ENC_CAPS_PARAM,
+    NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE,
+    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
+    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
+    NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
+    NV_ENC_REGISTER_RESOURCE,
 };
 use std::marker::PhantomData;
 
@@ -115,95 +115,48 @@ where
             )?;
 
         encoder_params.frameRateNum = params.frame_rate;
-
         params.apply_to_encode_config(self.get_frame_size()?, &mut encode_config);
 
-        encoder_params.encodeConfig = &raw mut encode_config;
-
-        if encoder_params.encodeWidth == 0 || encoder_params.encodeHeight == 0 {
+        if self.width == 0 || self.height == 0 {
             return Err(NvEncError::InvalidParam.into());
         }
 
-        unsafe {
-            if encoder_params.encodeGUID != guids::NV_ENC_CODEC_H264_GUID
-                && encoder_params.encodeGUID != guids::NV_ENC_CODEC_HEVC_GUID
-            {
-                return Err(NvEncError::InvalidParam.into());
-            }
+        match params.codec {
+            EncodeCodec::H264 => {
+                // SAFETY: We checked the codec is H264, so we can access the `hevcConfig` union field.
+                let h264_config = unsafe { &mut encode_config.encodeCodecConfig.h264Config };
 
-            if encoder_params.encodeGUID == guids::NV_ENC_CODEC_H264_GUID
-                && matches!(
+                if matches!(
                     self.buffer_format,
                     BufferFormat::YUV420_10BIT | BufferFormat::YUV444_10BIT
-                )
-            {
-                return Err(NvEncError::InvalidParam.into());
-            }
+                ) {
+                    return Err(NvEncError::InvalidParam.into());
+                }
 
-            if encoder_params.encodeGUID == guids::NV_ENC_CODEC_H264_GUID
-                && matches!(self.buffer_format, BufferFormat::YUV444)
-                && (*encoder_params.encodeConfig).encodeCodecConfig.h264Config.chromaFormatIDC != 3
-            {
-                return Err(NvEncError::InvalidParam.into());
-            }
+                if matches!(self.buffer_format, BufferFormat::YUV444)
+                    && h264_config.chromaFormatIDC != 3
+                {
+                    return Err(NvEncError::InvalidParam.into());
+                }
+            },
+            EncodeCodec::Hevc => {
+                // SAFETY: We checked the codec is HEVC, so we can access the `hevcConfig` union field.
+                let hevc_config = unsafe { &mut encode_config.encodeCodecConfig.hevcConfig };
 
-            if encoder_params.encodeGUID == guids::NV_ENC_CODEC_HEVC_GUID {
                 let yuv10_bit_format = matches!(
                     self.buffer_format,
                     BufferFormat::YUV420_10BIT | BufferFormat::YUV444_10BIT
                 );
-                if yuv10_bit_format
-                    && (*encoder_params.encodeConfig)
-                        .encodeCodecConfig
-                        .hevcConfig
-                        .pixelBitDepthMinus8()
-                        != 2
-                {
+                if yuv10_bit_format && hevc_config.pixelBitDepthMinus8() != 2 {
                     return Err(NvEncError::InvalidParam.into());
                 }
 
                 if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT)
-                    && (*encoder_params.encodeConfig).encodeCodecConfig.hevcConfig.chromaFormatIDC()
-                        != 3
+                    && hevc_config.chromaFormatIDC() != 3
                 {
                     return Err(NvEncError::InvalidParam.into());
                 }
-            }
-        }
-
-        if !encoder_params.encodeConfig.is_null() {
-            // This branch should always be taken, we copy the config to self.
-
-            encode_config = NV_ENC_CONFIG {
-                version: NV_ENC_CONFIG_VER,
-                ..unsafe { *encoder_params.encodeConfig }
-            };
-        } else {
-            // Can this branch ever be taken?
-
-            let mut preset_config = NV_ENC_PRESET_CONFIG {
-                version: NV_ENC_PRESET_CONFIG_VER,
-                presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
-                ..Default::default()
-            };
-            if !self.motion_estimation_only {
-                unsafe {
-                    self.nv_encode_api_function_list.nvEncGetEncodePresetConfigEx.unwrap()(
-                        self.encoder_handle as *mut _,
-                        encoder_params.encodeGUID,
-                        encoder_params.presetGUID,
-                        encoder_params.tuningInfo,
-                        &mut preset_config,
-                    )
-                    .into_nvenc_result()?;
-                }
-                encode_config = preset_config.presetCfg;
-            } else {
-                encode_config.version = NV_ENC_CONFIG_VER;
-                encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
-                encode_config.rcParams.constQP =
-                    _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
-            }
+            },
         }
 
         encoder_params.encodeConfig = &raw mut encode_config;
