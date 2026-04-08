@@ -93,16 +93,15 @@ impl BufferFormat {
 }
 
 bitflags! {
-    /// - `FORCE_INTRA`     Encode the current picture as an Intra picture.
-    /// - `FORCE_IDR`       Encode the current picture as an IDR picture.  This flag is only valid
-    ///                     when Picture type decision (PTD) is taken by the encoder.
-    /// - `SEQUENCE_HEADER` Write the sequence and picture header in encoded bitstream of the
-    ///                     current picture.
-    /// - `END_OF_STREAM`   Indicates end of the input stream.
     pub struct EncodePicFlags: u32 {
+        /// Encode the current picture as an Intra picture.
         const FORCE_INTRA = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEINTRA.0;
+        /// Encode the current picture as an IDR picture. This flag is only valid when Picture type
+        /// decision (PTD) is taken by the encoder.
         const FORCE_IDR = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0;
+        /// Write the sequence and picture header in encoded bitstream of the current picture.
         const SEQUENCE_HEADER = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0;
+        /// Indicates end of the input stream.
         const END_OF_STREAM = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0;
     }
 }
