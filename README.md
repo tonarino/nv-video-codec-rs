@@ -5,17 +5,13 @@ higher-level bindings are provided.
 
 ## Setup
 
-
 The project requires the `libnvcuvid.so` and `libnvidia-encode.so` libraries to be installed on the
-system. They are tied to a particular Nvidia driver and often shipped in a driver utilities package.
+system. They are tied to a particular Nvidia driver and often shipped in a system package.
 
-### Arch Linux
-
-The driver utilities package is called `nvidia-utils`.
-
-```
-sudo pacman -S nvidia-utils
-```
+- Arch Linux: `nvidia-utils`.
+- Debian: `libnvcuvid1`, `libnvidia-encode1`.
+- Gentoo: `nvidia-drivers`.
+- Ubuntu: `libnvidia-decode-XXX` and `libnvidia-encode-XXX`, where `XXX` is the driver version.
 
 ## Safe bindings overview
 
