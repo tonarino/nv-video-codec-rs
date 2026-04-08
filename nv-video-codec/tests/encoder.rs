@@ -143,7 +143,10 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
+    #[cfg(feature = "torture")]
     const NUM_TORTURE_FRAMES: usize = 500;
+    #[cfg(not(feature = "torture"))]
+    const NUM_TORTURE_FRAMES: usize = 5;
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
