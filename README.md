@@ -5,15 +5,13 @@ higher-level bindings are provided.
 
 ## Setup
 
-The project requires the Video Codec SDK to be installed.
+The project requires the `libnvcuvid.so` and `libnvidia-encode.so` libraries to be installed on the
+system. They are tied to a particular Nvidia driver and often shipped in a system package.
 
-### Arch Linux
-
-The SDK libraries are available in the official `nvidia-utils` package.
-
-```
-sudo pacman -S nvidia-utils
-```
+- Arch Linux: `nvidia-utils`.
+- Debian: `libnvcuvid1`, `libnvidia-encode1`.
+- Gentoo: `nvidia-drivers`.
+- Ubuntu: `libnvidia-decode-XXX` and `libnvidia-encode-XXX`, where `XXX` is the driver version.
 
 ## Safe bindings overview
 
