@@ -15,6 +15,10 @@ use std::time::Duration;
 #[macro_use]
 mod utils;
 
+// TODO(efyang) make this behaviour configurable and part of the library
+// From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
+const DECODE_TRIES: usize = 3;
+
 fn init_cuda_ctx() -> Result<Context> {
     rustacuda::init(rustacuda::CudaFlags::empty())?;
     let device = Device::get_device(0)?;
@@ -32,9 +36,6 @@ fn init_decoder() -> Result<()> {
     Ok(())
 }
 
-// TODO(efyang) make this behaviour configurable and part of the library
-// From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
-const DECODE_TRIES: usize = 3;
 fn run_basic_decode(
     test_name: &str,
     data: &[u8],
@@ -120,10 +121,6 @@ fn decode_h265_3k_device() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "torture")]
-const NUM_TORTURE_FRAMES: i64 = 10000;
-#[cfg(not(feature = "torture"))]
-const NUM_TORTURE_FRAMES: i64 = 10;
 fn run_torture_test(
     test_name: &str,
     data: &[u8],
@@ -132,6 +129,11 @@ fn run_torture_test(
     use_device_frame: bool,
     frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
+    #[cfg(feature = "torture")]
+    const NUM_TORTURE_FRAMES: i64 = 10000;
+    #[cfg(not(feature = "torture"))]
+    const NUM_TORTURE_FRAMES: i64 = 10;
+
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
     let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
@@ -195,9 +197,10 @@ fn run_torture_test(
 
     info_ctx!(
         test_name,
-        "frames decoded: {}, in {:?}, avg time/frame in past 1000 frames: {:?}",
+        "frames decoded: {}, in {:?}, avg time/frame in past {} frames: {:?}",
         total_frames_decoded,
         total_time,
+        NUM_TORTURE_FRAMES,
         total_time / NUM_TORTURE_FRAMES as u32,
     );
 
