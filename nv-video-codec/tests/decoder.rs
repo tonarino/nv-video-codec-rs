@@ -3,7 +3,9 @@ extern crate log;
 extern crate simple_logger;
 
 use anyhow::Result;
-use nv_video_codec::decoder::{DecoderPacketFlags, HostFrameAllocator, NvDecoderBuilder};
+use nv_video_codec::decoder::{
+    DecoderPacketFlags, DeviceFrameAllocator, FrameAllocator, HostFrameAllocator, NvDecoderBuilder,
+};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -122,12 +124,11 @@ fn decode_h265_3k_device() -> Result<()> {
     Ok(())
 }
 
-fn run_torture_test(
+fn run_torture_test<FA: FrameAllocator>(
     test_name: &str,
     data: &[u8],
     expected_width: u32,
     expected_height: u32,
-    use_device_frame: bool,
     frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
     #[cfg(feature = "torture")]
@@ -137,9 +138,9 @@ fn run_torture_test(
 
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
-        .use_device_frame(use_device_frame)
-        .build()?;
+
+    let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<FA>()?;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
@@ -159,6 +160,7 @@ fn run_torture_test(
         // packet only being available in the later `decode()` calls.
         while i < DECODE_TRIES && decoding_output.frames.is_empty() {
             let packet_timestamp = i as i64;
+            drop(decoding_output);
             decoding_output =
                 decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
             i += 1;
@@ -211,23 +213,41 @@ fn run_torture_test(
 #[test]
 fn decode_h265_3k_basic_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, None)
+    run_torture_test::<HostFrameAllocator>("decode_h265_3k_basic_torture", data, 3088, 2076, None)
 }
 
 #[test]
 fn decode_h265_3k_device_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, None)
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_torture",
+        data,
+        3088,
+        2076,
+        None,
+    )
 }
 
 #[test]
 fn decode_h265_3k_device_framelock_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, None)
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_framelock_torture",
+        data,
+        3088,
+        2076,
+        None,
+    )
 }
 
 #[test]
 fn decode_h265_3k_device_torture_60fps() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture_60fps", data, 3088, 2076, true, Some(60.0))
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_torture_60fps",
+        data,
+        3088,
+        2076,
+        Some(60.0),
+    )
 }
