@@ -89,8 +89,6 @@ where
     buffer_format: BufferFormat,
     device: *mut Device, // Originally a void pointer
     device_type: NV_ENC_DEVICE_TYPE,
-    initialize_params: NV_ENC_INITIALIZE_PARAMS,
-    encode_config: NV_ENC_CONFIG,
     encoder_initialized: bool,
     extra_output_delay: u32,
     bitstream_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
@@ -144,8 +142,7 @@ where
 
             if encoder_params.encodeGUID == guids::NV_ENC_CODEC_H264_GUID
                 && matches!(self.buffer_format, BufferFormat::YUV444)
-                && (*encoder_params.encodeConfig).encodeCodecConfig.h264Config.chromaFormatIDC
-                    != 3
+                && (*encoder_params.encodeConfig).encodeCodecConfig.h264Config.chromaFormatIDC != 3
             {
                 return Err(NvEncError::InvalidParam.into());
             }
@@ -166,10 +163,7 @@ where
                 }
 
                 if matches!(self.buffer_format, BufferFormat::YUV444 | BufferFormat::YUV444_10BIT)
-                    && (*encoder_params.encodeConfig)
-                        .encodeCodecConfig
-                        .hevcConfig
-                        .chromaFormatIDC()
+                    && (*encoder_params.encodeConfig).encodeCodecConfig.hevcConfig.chromaFormatIDC()
                         != 3
                 {
                     return Err(NvEncError::InvalidParam.into());
@@ -177,15 +171,16 @@ where
             }
         }
 
-        self.initialize_params =
-            NV_ENC_INITIALIZE_PARAMS { version: NV_ENC_INITIALIZE_PARAMS_VER, ..encoder_params };
-
         if !encoder_params.encodeConfig.is_null() {
-            self.encode_config = NV_ENC_CONFIG {
+            // This branch should always be taken, we copy the config to self.
+
+            encode_config = NV_ENC_CONFIG {
                 version: NV_ENC_CONFIG_VER,
                 ..unsafe { *encoder_params.encodeConfig }
             };
         } else {
+            // Can this branch ever be taken?
+
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
                 presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
@@ -202,34 +197,34 @@ where
                     )
                     .into_nvenc_result()?;
                 }
-                self.encode_config = preset_config.presetCfg;
+                encode_config = preset_config.presetCfg;
             } else {
-                self.encode_config.version = NV_ENC_CONFIG_VER;
-                self.encode_config.rcParams.rateControlMode =
-                    EncodeRateControlMode::ConstantQp.into();
-                self.encode_config.rcParams.constQP =
+                encode_config.version = NV_ENC_CONFIG_VER;
+                encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
+                encode_config.rcParams.constQP =
                     _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
             }
         }
-        self.initialize_params.encodeConfig = &mut self.encode_config;
+
+        encoder_params.encodeConfig = &raw mut encode_config;
 
         unsafe {
             self.nv_encode_api_function_list.nvEncInitializeEncoder.unwrap()(
                 self.encoder_handle as *mut _,
-                &mut self.initialize_params,
+                &raw mut encoder_params,
             )
             .into_nvenc_result()?;
         }
 
         self.encoder_initialized = true;
-        self.width = self.initialize_params.encodeWidth;
-        self.height = self.initialize_params.encodeHeight;
-        self.max_encode_width = self.initialize_params.maxEncodeWidth;
-        self.max_encode_height = self.initialize_params.maxEncodeHeight;
+        self.width = encoder_params.encodeWidth;
+        self.height = encoder_params.encodeHeight;
+        self.max_encode_width = encoder_params.maxEncodeWidth;
+        self.max_encode_height = encoder_params.maxEncodeHeight;
 
         // TODO(efyang): convert this to a usize
-        self.encoder_buffer = self.encode_config.frameIntervalP
-            + self.encode_config.rcParams.lookaheadDepth as i32
+        self.encoder_buffer = encode_config.frameIntervalP
+            + encode_config.rcParams.lookaheadDepth as i32
             + self.extra_output_delay as i32;
         self.output_delay = self.encoder_buffer - 1;
         self.mapped_input_buffers.resize(self.encoder_buffer as usize, std::ptr::null_mut());
@@ -461,12 +456,9 @@ where
                 encode_config = preset_config.presetCfg;
             }
         } else {
-            // TODO(mbernat): Why are we only modifying self here?
-
-            self.encode_config.version = NV_ENC_CONFIG_VER;
-            self.encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
-            self.encode_config.rcParams.constQP =
-                NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
+            encode_config.version = NV_ENC_CONFIG_VER;
+            encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
+            encode_config.rcParams.constQP = NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }
 
         if codec.as_guid() == guids::NV_ENC_CODEC_H264_GUID {
@@ -496,13 +488,6 @@ where
         }
 
         Ok((initialize_params, encode_config))
-    }
-
-    fn get_initialize_params(&self) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
-        if self.initialize_params.encodeConfig.is_null() {
-            return Err(NvEncError::InvalidPointer.into());
-        }
-        Ok(self.initialize_params)
     }
 
     // not gonna implement this for now, not needed
@@ -589,8 +574,6 @@ where
             buffer_format,
             device,
             device_type,
-            initialize_params: NV_ENC_INITIALIZE_PARAMS::default(),
-            encode_config: CustomDefault::default(),
             encoder_initialized: false,
             extra_output_delay,
             bitstream_output_buffer: Vec::new(),
