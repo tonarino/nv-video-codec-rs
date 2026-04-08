@@ -15,11 +15,11 @@ use std::{
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
-    encoder::{types::BufferFormat, NvEncoderExt, NvEncoderGL},
+    encoder::{
+        types::BufferFormat, EncodePicFlags, EncodeRateControlMode, EncodeTuningInfo, NvEncoderExt,
+        NvEncoderGL,
+    },
     guids::{EncodeCodec, EncodePreset},
-};
-use nv_video_codec_sys::{
-    _NV_ENC_PIC_FLAGS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_TUNING_INFO,
 };
 use simple_logger::SimpleLogger;
 
@@ -56,12 +56,12 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         // can't really see a difference between ULTRA_LOW_LATENCY and LOW_LATENCY???
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
-        NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
+        EncodeTuningInfo::UltraLowLatency,
     )?;
     params.frameRateNum = 60;
     unsafe {
         (*params.encodeConfig).rcParams.rateControlMode =
-            NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR;
+            EncodeRateControlMode::ConstantBitrate.into();
         // (*params.encodeConfig).rcParams.multiPass =
         //     NV_ENC_MULTI_PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION;
         (*params.encodeConfig).rcParams.lowDelayKeyFrameScale = 1;
@@ -119,7 +119,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
         gl::BindTexture(resource.target, 0);
     }
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, None)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
 
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
@@ -153,15 +153,11 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
+    // force intra-frame and force per-frame metadata
+    let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
-        let params = NV_ENC_PIC_PARAMS {
-            // force intra-frame and force per-frame metadata
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0
-                | _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0,
-            ..Default::default()
-        };
-        encoder.encode_frame_from_data(data, width, height, Some(params), &mut packet)?;
+        encoder.encode_frame_from_data(data, width, height, pic_flags, &mut packet)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

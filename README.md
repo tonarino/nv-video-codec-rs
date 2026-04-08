@@ -28,14 +28,14 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()>;
     pub fn end_encode(&mut self, packet: &mut Vec<&[u8]>) -> NvEncoderResult<()>;
     pub fn create_default_encoder_params(
         &mut self,
         codec_guid: GUID,
         preset_guid: GUID,
-        tuning_info: NV_ENC_TUNING_INFO,
+        tuning_info: EncodeTuningInfo,
     ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS>;
 }
 ```

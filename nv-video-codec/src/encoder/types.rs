@@ -1,7 +1,8 @@
-use ffi::_NV_ENC_BUFFER_FORMAT;
-use nv_video_codec_sys as ffi;
-
 use super::{NvEncError, NvEncoderError};
+use ffi::_NV_ENC_BUFFER_FORMAT;
+use nv_video_codec_sys::{
+    self as ffi, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
+};
 
 ffi_enum! {
     #[derive(Debug, Clone, Copy)]
@@ -87,6 +88,59 @@ impl BufferFormat {
             Self::YUV444_10BIT => Ok(2 * luma_width),
             Self::ARGB | Self::ARGB10 | Self::AYUV | Self::ABGR | Self::ABGR10 => Ok(0),
             _ => Err(NvEncError::InvalidParam.into()),
+        }
+    }
+}
+
+bitflags! {
+    pub struct EncodePicFlags: u32 {
+        /// Encode the current picture as an Intra picture.
+        const FORCE_INTRA = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEINTRA.0;
+        /// Encode the current picture as an IDR picture. This flag is only valid when Picture type
+        /// decision (PTD) is taken by the encoder.
+        const FORCE_IDR = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR.0;
+        /// Write the sequence and picture header in encoded bitstream of the current picture.
+        const SEQUENCE_HEADER = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS.0;
+        /// Indicates end of the input stream.
+        const END_OF_STREAM = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0;
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EncodeRateControlMode {
+    ConstantQp,
+    VariableBitrate,
+    ConstantBitrate,
+}
+
+impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
+    fn from(value: EncodeRateControlMode) -> Self {
+        match value {
+            EncodeRateControlMode::ConstantQp => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP,
+            EncodeRateControlMode::VariableBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_VBR,
+            EncodeRateControlMode::ConstantBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR,
+        }
+    }
+}
+
+/// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EncodeTuningInfo {
+    HighQuality,
+    LowLatency,
+    UltraLowLatency,
+    Lossless,
+}
+
+impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
+    fn from(value: EncodeTuningInfo) -> Self {
+        match value {
+            EncodeTuningInfo::HighQuality => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_HIGH_QUALITY,
+            EncodeTuningInfo::LowLatency => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
+            EncodeTuningInfo::UltraLowLatency => {
+                NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY
+            },
+            EncodeTuningInfo::Lossless => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOSSLESS,
         }
     }
 }

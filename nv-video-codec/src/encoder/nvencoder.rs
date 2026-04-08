@@ -1,27 +1,23 @@
 #![allow(unused_variables, dead_code)]
-use std::marker::PhantomData;
-
-use nv_video_codec_sys::{
-    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_FLAGS,
-    _NV_ENC_PIC_STRUCT, _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
-    NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
-    NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
-    NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
-    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
-    NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
-    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, NV_ENC_TUNING_INFO,
-};
-
-use crate::{
-    encoder::defaults::CustomDefault,
-    guids::{EncodeCodec, EncodePreset},
-};
-
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoderError, NvEncoderResult,
 };
+use crate::{
+    encoder::{defaults::CustomDefault, EncodePicFlags, EncodeRateControlMode, EncodeTuningInfo},
+    guids::{EncodeCodec, EncodePreset},
+};
+use nv_video_codec_sys::{
+    guids, NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
+    _NV_ENC_QP, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION,
+    NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS,
+    NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER,
+    NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE,
+    NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS,
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS,
+    NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
+};
+use std::marker::PhantomData;
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -193,7 +189,7 @@ where
             } else {
                 self.encode_config.version = NV_ENC_CONFIG_VER;
                 self.encode_config.rcParams.rateControlMode =
-                    NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+                    EncodeRateControlMode::ConstantQp.into();
                 self.encode_config.rcParams.constQP =
                     _NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
             }
@@ -270,7 +266,7 @@ where
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -283,7 +279,7 @@ where
         let encode_status = self.do_encode(
             self.mapped_input_buffers[buffer_index as usize],
             self.bitstream_output_buffer[buffer_index as usize],
-            pic_params,
+            pic_flags,
         );
 
         match encode_status {
@@ -379,7 +375,7 @@ where
         &mut self,
         codec: EncodeCodec,
         preset: EncodePreset,
-        tuning_info: NV_ENC_TUNING_INFO,
+        tuning_info: EncodeTuningInfo,
     ) -> NvEncoderResult<NV_ENC_INITIALIZE_PARAMS> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::NoEncodeDevice.into());
@@ -434,11 +430,11 @@ where
             (*initialize_params.encodeConfig).frameIntervalP = 1;
             (*initialize_params.encodeConfig).gopLength = NVENC_INFINITE_GOPLENGTH;
             (*initialize_params.encodeConfig).rcParams.rateControlMode =
-                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+                EncodeRateControlMode::ConstantQp.into();
         }
 
         if !self.motion_estimation_only {
-            initialize_params.tuningInfo = tuning_info;
+            initialize_params.tuningInfo = tuning_info.into();
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
                 presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
@@ -449,7 +445,7 @@ where
                     self.encoder_handle as *mut _,
                     codec.as_guid(),
                     preset.as_guid(),
-                    tuning_info,
+                    tuning_info.into(),
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
@@ -457,8 +453,7 @@ where
             }
         } else {
             self.encode_config.version = NV_ENC_CONFIG_VER;
-            self.encode_config.rcParams.rateControlMode =
-                NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP;
+            self.encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
             self.encode_config.rcParams.constQP =
                 NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }
@@ -764,7 +759,7 @@ where
         &mut self,
         input_buffer: NV_ENC_INPUT_PTR,
         output_buffer: NV_ENC_OUTPUT_PTR,
-        pic_params: Option<NV_ENC_PIC_PARAMS>,
+        pic_flags: EncodePicFlags,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -779,7 +774,8 @@ where
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
-            ..pic_params.unwrap_or_default()
+            encodePicFlags: pic_flags.bits(),
+            ..Default::default()
         };
 
         unsafe {
@@ -861,7 +857,7 @@ where
     fn send_eos(&mut self) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
-            encodePicFlags: _NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_EOS.0,
+            encodePicFlags: EncodePicFlags::END_OF_STREAM.bits(),
             completionEvent: self
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
