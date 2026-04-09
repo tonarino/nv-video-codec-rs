@@ -57,7 +57,6 @@ pub struct Device {
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
 
-// TODO(mbernat): Make private and expose with a proper interface
 #[repr(C)]
 pub struct Input {
     _data: [u8; 0],
