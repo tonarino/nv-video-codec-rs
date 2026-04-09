@@ -168,11 +168,10 @@ where
         &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize]
     }
 
-    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource {
+    pub fn get_next_input_resource(&mut self) -> ResourceManager::InputResourceRef<'_> {
         let input_frame = &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize];
-        let resource_ptr = input_frame.input_ptr as *mut ResourceManager::InputResource;
-        // SAFETY: The input resources are backed by `self`.
-        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
+
+        input_frame.into()
     }
 
     pub fn encode_frame(
@@ -578,6 +577,8 @@ where
             chroma_offsets.resize(2, 0);
 
             let registered_input_frame = NvEncInputFrame {
+                width,
+                height,
                 input_ptr: input_frame_ptr,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
@@ -1039,15 +1040,33 @@ where
 // TODO: clean this struct up
 #[derive(Debug)]
 pub struct NvEncInputFrame {
-    // TODO(mbernat): Make private and expose with a proper interface
-    pub input_ptr: *mut Input, // Originally a void pointer
+    width: u32,
+    height: u32,
+    input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],
     num_chroma_planes: u32,
-    // TODO(mbernat): Make private and expose with a proper interface
-    pub pitch: u32,
+    pitch: u32,
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+}
+
+impl NvEncInputFrame {
+    pub fn ptr(&self) -> *mut Input {
+        self.input_ptr
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn pitch(&self) -> u32 {
+        self.pitch
+    }
 }
 
 pub struct NvEncoderSettings {

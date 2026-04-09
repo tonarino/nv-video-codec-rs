@@ -24,7 +24,7 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
     pub fn create_encoder(&mut self, encoder_params: &NvEncoderParams) -> NvEncoderResult<()>;
     pub fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
-    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource;
+    pub fn get_next_input_resource(&mut self) -> ResourceManager::InputResourceRef<'_>;
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,

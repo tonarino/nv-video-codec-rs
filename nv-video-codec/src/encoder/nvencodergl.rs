@@ -3,7 +3,7 @@ use super::{
 };
 use crate::{
     decoder::types::NvEncoderResult,
-    encoder::nvencoder::{Input, NvEncoderSettings},
+    encoder::nvencoder::{Input, NvEncInputFrame, NvEncoderSettings},
 };
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
@@ -50,7 +50,7 @@ impl NvEncoder<NvEncoderGLResourceManager> {
         self.unregister_input_resources()?;
 
         for input_frame in self.input_frames.iter() {
-            let resource_ptr = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = input_frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
             if !resource_ptr.is_null() {
                 unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
                 // TODO(efyang) check for possible memory leak here (vs original delete)
@@ -59,7 +59,7 @@ impl NvEncoder<NvEncoderGLResourceManager> {
         self.input_frames.clear();
 
         for reference_frame in self.reference_frames.iter() {
-            let resource_ptr = reference_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = reference_frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
             if !resource_ptr.is_null() {
                 unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
             }
@@ -69,10 +69,21 @@ impl NvEncoder<NvEncoderGLResourceManager> {
     }
 }
 
+// TODO: wrap the user facing type
+impl<'a> From<&'a mut NvEncInputFrame> for &'a mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+    fn from(frame: &'a mut NvEncInputFrame) -> Self {
+        let resource_ptr = frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+
+        // SAFETY: The input resources are valid for 'a.
+        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
+    }
+}
+
 pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+    type InputResourceRef<'a> = &'a mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
     type ResourceContext = ();
 
     fn allocate_input_buffers(

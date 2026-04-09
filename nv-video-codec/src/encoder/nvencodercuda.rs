@@ -4,14 +4,18 @@ use super::{
 };
 use crate::{
     common::IntoCudaResult,
-    encoder::nvencoder::{Device, Input, NvEncoderSettings},
+    encoder::nvencoder::{Device, Input, NvEncInputFrame, NvEncoderSettings},
 };
+use cuda_gl_interop::{CudaSliceMut, Size};
 use nv_video_codec_sys::{cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE};
 use rustacuda::{
     context::{ContextHandle as _, ContextStack},
     prelude::Context,
 };
-use std::ops::{Deref, DerefMut};
+use std::{
+    ffi::c_void,
+    ops::{Deref, DerefMut},
+};
 
 pub struct NvEncoderCuda {
     encoder: NvEncoder<NvEncoderCudaResourceManager>,
@@ -55,7 +59,7 @@ impl NvEncoder<NvEncoderCudaResourceManager> {
         ContextStack::push(&self.resource_context).unwrap();
 
         for input_frame in self.input_frames.iter() {
-            let resource_ptr = input_frame.input_ptr;
+            let resource_ptr = input_frame.ptr();
             if !resource_ptr.is_null() {
                 unsafe {
                     cuMemFree_v2(resource_ptr as CUdeviceptr);
@@ -65,7 +69,7 @@ impl NvEncoder<NvEncoderCudaResourceManager> {
         self.input_frames.clear();
 
         for reference_frame in self.reference_frames.iter() {
-            let resource_ptr = reference_frame.input_ptr;
+            let resource_ptr = reference_frame.ptr();
             if !resource_ptr.is_null() {
                 unsafe {
                     cuMemFree_v2(resource_ptr as CUdeviceptr);
@@ -80,10 +84,22 @@ impl NvEncoder<NvEncoderCudaResourceManager> {
     }
 }
 
+impl<'a> From<&'a mut NvEncInputFrame> for CudaSliceMut<'a> {
+    fn from(frame: &'a mut NvEncInputFrame) -> Self {
+        let resolution = Size { width: frame.width(), height: frame.height() };
+        let buffer = frame.ptr() as *mut c_void;
+        let pitch = frame.pitch() as usize;
+
+        // SAFETY: Input frames are valid for writing until we call `encode_frame`.
+        unsafe { CudaSliceMut::new(buffer, pitch, resolution) }
+    }
+}
+
 pub struct NvEncoderCudaResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
     type InputResource = CUdeviceptr;
+    type InputResourceRef<'a> = CudaSliceMut<'a>;
     type ResourceContext = Context;
 
     fn allocate_input_buffers(

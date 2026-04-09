@@ -11,12 +11,13 @@ torture = []
 
 [dependencies]
 bitflags = "1.2"
+cuda-gl-interop = { version = "0.1.0", git = "https://github.com/tonarino/cuda-gl-interop", branch = "non-owned-slices" }
 gl = "0.14"
 nv-video-codec-sys = { path = "../nv-video-codec-sys" }
 parking_lot = "0.11"
-rustacuda = "0.1"
-rustacuda_core = "0.1"
-rustacuda_derive = "0.1"
+rustacuda = "0.1.2"
+rustacuda_core = "0.1.2"
+rustacuda_derive = "0.1.2"
 thiserror = "1.0"
 
 [dev-dependencies]

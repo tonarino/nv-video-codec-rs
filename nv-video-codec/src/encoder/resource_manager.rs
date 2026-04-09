@@ -1,8 +1,10 @@
 use super::{nvencoder::NvEncoder, NvEncoderError};
+use crate::encoder::nvencoder::NvEncInputFrame;
 
 pub trait NvEncoderResourceManager {
-    type ResourceContext;
     type InputResource;
+    type InputResourceRef<'a>: From<&'a mut NvEncInputFrame>;
+    type ResourceContext;
 
     fn allocate_input_buffers(
         encoder: &mut NvEncoder<Self>,
