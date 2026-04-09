@@ -7,8 +7,10 @@ use nv_video_codec_sys::{
 };
 
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodeCodec {
     H264,
+    #[default]
     Hevc,
 }
 
@@ -22,7 +24,9 @@ impl EncodeCodec {
 }
 
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodeProfile {
+    #[default]
     AutoSelect,
 }
 
@@ -44,8 +48,10 @@ impl EncodeProfile {
 ///
 /// https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html#multi-nvenc-split-frame-encoding-in-hevc-and-av1
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodePreset {
     P1,
+    #[default]
     P3,
     P7,
 }
