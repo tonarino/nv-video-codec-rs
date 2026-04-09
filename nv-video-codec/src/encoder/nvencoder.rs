@@ -18,7 +18,7 @@ use nv_video_codec_sys::{
     NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
     NV_ENC_REGISTER_RESOURCE,
 };
-use std::{marker::PhantomData, os::raw::c_void};
+use std::{ffi::c_void, marker::PhantomData};
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -485,7 +485,7 @@ where
 
         let mut encode_session_ex_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
             version: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER,
-            device: device as *mut std::os::raw::c_void,
+            device: device as *mut c_void,
             deviceType: device_type,
             apiVersion: NVENCAPI_VERSION,
             ..NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default()
