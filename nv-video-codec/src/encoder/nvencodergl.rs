@@ -28,31 +28,6 @@ impl DerefMut for NvEncoderGL {
     }
 }
 
-pub fn upload_data_to_texture_resource(
-    // TODO: wrap FFI type
-    resource: &mut _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
-    data: &[u8],
-    width: u32,
-    height: u32,
-) {
-    // TODO: remove these hacks
-    unsafe {
-        gl::BindTexture(resource.target, resource.texture);
-        gl::TexSubImage2D(
-            resource.target,
-            0,                         // level
-            0,                         // x offset
-            0,                         // y offset
-            width as i32,              // width
-            (height * 3 / 2) as i32,   // height
-            gl::RED,                   // format (single-channel)
-            gl::UNSIGNED_BYTE,         // type
-            data.as_ptr() as *const _, // data
-        );
-        gl::BindTexture(resource.target, 0);
-    }
-}
-
 impl NvEncoderGL {
     pub fn new(settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
@@ -171,5 +146,30 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
 
     fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> NvEncoderResult<()> {
         encoder.release_gl_resources()
+    }
+}
+
+pub fn upload_data_to_texture_resource(
+    data: &[u8],
+    // TODO: wrap FFI type
+    resource: &mut _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+    width: u32,
+    height: u32,
+) {
+    // TODO: remove these hacks
+    unsafe {
+        gl::BindTexture(resource.target, resource.texture);
+        gl::TexSubImage2D(
+            resource.target,
+            0,                         // level
+            0,                         // x offset
+            0,                         // y offset
+            width as i32,              // width
+            (height * 3 / 2) as i32,   // height
+            gl::RED,                   // format (single-channel)
+            gl::UNSIGNED_BYTE,         // type
+            data.as_ptr() as *const _, // data
+        );
+        gl::BindTexture(resource.target, 0);
     }
 }

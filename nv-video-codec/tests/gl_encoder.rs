@@ -98,7 +98,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
     let resource = encoder.get_next_input_resource();
-    upload_data_to_texture_resource(resource, data, width, height);
+    upload_data_to_texture_resource(data, resource, width, height);
 
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
@@ -141,7 +141,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
         let resource = encoder.get_next_input_resource();
-        upload_data_to_texture_resource(resource, data, width, height);
+        upload_data_to_texture_resource(data, resource, width, height);
         encoder.encode_frame(&mut packet, pic_flags)?;
 
         frames_encoded += 1;
