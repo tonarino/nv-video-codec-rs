@@ -67,7 +67,7 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         },
     };
 
-    encoder.create_encoder(&params)?;
+    encoder.create_encoder(params)?;
 
     Ok(())
 }
