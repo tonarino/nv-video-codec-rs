@@ -7,7 +7,7 @@ use anyhow::Result;
 use nv_video_codec::{
     encoder::{
         nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodePicFlags, EncodeRateControl,
-        EncodeRateControlMode, EncodeTuningInfo, NvEncoderExt, NvEncoderParams, NvEncoderSettings,
+        EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -92,8 +92,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
     let _resource = encoder.get_next_input_resource();
-
-    // TODO: copy data to resource
+    // TODO: Copy data to resource
 
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
@@ -132,9 +131,13 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut frames_encoded = 0;
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
+
+        let _resource = encoder.get_next_input_resource();
+        // TODO: Copy data to resource
+
         // force intra-frame and force per-frame metadata
         let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
-        encoder.encode_frame_from_data(data, width, height, pic_flags, &mut packet)?;
+        encoder.encode_frame(&mut packet, pic_flags)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

@@ -1,8 +1,11 @@
+use crate::encoder::NvEncoderError;
 use ffi::{
     cudaVideoChromaFormat_enum, cudaVideoCodec_enum, cudaVideoCreateFlags_enum,
     cudaVideoDeinterlaceMode_enum, cudaVideoSurfaceFormat_enum,
 };
 use nv_video_codec_sys as ffi;
+
+pub type NvEncoderResult<T> = Result<T, NvEncoderError>;
 
 // *************** BASIC UTILITY TYPES ****************
 // ---------------------------------------------------------------

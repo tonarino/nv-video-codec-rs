@@ -1,12 +1,13 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderExt, NvEncoderResult,
 };
-use crate::encoder::{
-    nvencoder::{Input, NvEncoderSettings},
-    EncodePicFlags,
+use crate::{
+    decoder::types::NvEncoderResult,
+    encoder::nvencoder::{Input, NvEncoderSettings},
 };
-use nv_video_codec_sys::{_NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX};
+use nv_video_codec_sys::{
+    _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+};
 use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
@@ -27,34 +28,28 @@ impl DerefMut for NvEncoderGL {
     }
 }
 
-impl NvEncoderExt for NvEncoderGL {
-    fn encode_frame_from_data(
-        &mut self,
-        data: &[u8],
-        width: u32,
-        height: u32,
-        pic_flags: EncodePicFlags,
-        output_packet_buffer: &mut Vec<&[u8]>,
-    ) -> NvEncoderResult<()> {
-        let resource = self.get_next_input_resource();
-        // TODO: remove these hacks
-        unsafe {
-            gl::BindTexture(resource.target, resource.texture);
-            gl::TexSubImage2D(
-                resource.target,
-                0,                         // level
-                0,                         // x offset
-                0,                         // y offset
-                width as i32,              // width
-                (height * 3 / 2) as i32,   // height
-                gl::RED,                   // format (single-channel)
-                gl::UNSIGNED_BYTE,         // type
-                data.as_ptr() as *const _, // data
-            );
-            gl::BindTexture(resource.target, 0);
-        }
-
-        self.encode_frame(output_packet_buffer, pic_flags)
+pub fn upload_data_to_texture_resource(
+    // TODO: wrap FFI type
+    resource: &mut _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) {
+    // TODO: remove these hacks
+    unsafe {
+        gl::BindTexture(resource.target, resource.texture);
+        gl::TexSubImage2D(
+            resource.target,
+            0,                         // level
+            0,                         // x offset
+            0,                         // y offset
+            width as i32,              // width
+            (height * 3 / 2) as i32,   // height
+            gl::RED,                   // format (single-channel)
+            gl::UNSIGNED_BYTE,         // type
+            data.as_ptr() as *const _, // data
+        );
+        gl::BindTexture(resource.target, 0);
     }
 }
 

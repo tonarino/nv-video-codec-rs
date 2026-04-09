@@ -1,13 +1,10 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderExt, NvEncoderResult,
+    NvEncoderResult,
 };
 use crate::{
     common::IntoCudaResult,
-    encoder::{
-        nvencoder::{Device, Input, NvEncoderSettings},
-        EncodePicFlags,
-    },
+    encoder::nvencoder::{Device, Input, NvEncoderSettings},
 };
 use nv_video_codec_sys::{cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE};
 use rustacuda::{
@@ -31,23 +28,6 @@ impl Deref for NvEncoderCuda {
 impl DerefMut for NvEncoderCuda {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.encoder
-    }
-}
-
-impl NvEncoderExt for NvEncoderCuda {
-    fn encode_frame_from_data(
-        &mut self,
-        _data: &[u8],
-        _width: u32,
-        _height: u32,
-        pic_flags: EncodePicFlags,
-        output_packet_buffer: &mut Vec<&[u8]>,
-    ) -> NvEncoderResult<()> {
-        let _resource = self.get_next_input_resource();
-
-        // TODO: Copy data to resource
-
-        self.encode_frame(output_packet_buffer, pic_flags)
     }
 }
 
