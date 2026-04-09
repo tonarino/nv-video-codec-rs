@@ -1,6 +1,7 @@
 pub mod error;
 mod nvencoder;
 #[macro_use]
+// TODO: remove module
 pub mod traits;
 mod defaults;
 pub mod nvencodercuda;

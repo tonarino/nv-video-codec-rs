@@ -1,10 +1,8 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
+    NvEncoderResult,
 };
-use crate::{
-    decoder::types::NvEncoderResult,
-    encoder::nvencoder::{Input, NvEncInputFrame, NvEncoderSettings},
-};
+use crate::encoder::nvencoder::{Input, NvEncInputFrame, NvEncoderSettings};
 use nv_video_codec_sys::{
     _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
 };
