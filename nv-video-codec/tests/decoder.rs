@@ -57,7 +57,7 @@ fn run_basic_decode(
     // TODO(mbernat): This loop is very random, try to understand it better.
     // It has something to do with the latency settings and the decoding output for the current
     // packet only being available in the later `decode()` calls.
-    while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+    while i < DECODE_TRIES && decoding_output.frame_count == 0 {
         let packet_timestamp = i as i64;
         drop(decoding_output);
         decoding_output =
@@ -77,12 +77,12 @@ fn run_basic_decode(
     info_ctx!(
         test_name,
         "frames decoded: {}, in {:?}",
-        decoding_output.frames.len(),
+        decoding_output.frame_count,
         start.elapsed(),
     );
     assert!(!frame_info.video_info().is_empty());
-    let frame = decoding_output.frames.pop_front().unwrap();
-    let frame_slice = frame.data.as_slice();
+    let frame = decoding_output.frames.next().unwrap();
+    let frame_slice = frame.data;
     info_ctx!(test_name, "Got frame of size: {}", frame_slice.len());
     assert!(!frame_slice.is_empty());
 
@@ -158,7 +158,7 @@ fn run_torture_test<FA: FrameAllocator>(
         // TODO(mbernat): This loop is very random, try to understand it better.
         // It has something to do with the latency settings and the decoding output for the current
         // packet only being available in the later `decode()` calls.
-        while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+        while i < DECODE_TRIES && decoding_output.frame_count == 0 {
             let packet_timestamp = i as i64;
             drop(decoding_output);
             decoding_output =
@@ -166,12 +166,12 @@ fn run_torture_test<FA: FrameAllocator>(
             i += 1;
         }
 
-        let _ = decoding_output.frames[0];
+        let _ = decoding_output.frames.next().unwrap();
 
         total_time += start.elapsed();
         blocked_time += start.elapsed();
 
-        total_frames_decoded += decoding_output.frames.len();
+        total_frames_decoded += decoding_output.frame_count;
         if total_frames_decoded % 1000 == 0 {
             info_ctx!(
                 test_name,

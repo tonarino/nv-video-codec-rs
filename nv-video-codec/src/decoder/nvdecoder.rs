@@ -17,13 +17,11 @@ use ffi::{
     CUVIDPICPARAMS, CUVIDPROCPARAMS, CUVIDSOURCEDATAPACKET,
 };
 use nv_video_codec_sys as ffi;
-use parking_lot::Mutex;
 use rustacuda::context::{Context, ContextHandle, ContextStack};
 use std::{
     collections::VecDeque,
     convert::TryInto,
     os::raw::{c_int, c_ulong, c_void},
-    sync::Arc,
     time::Instant,
 };
 
@@ -49,9 +47,8 @@ pub struct NvDecoder<A: FrameAllocator> {
     decoded_frames_returned: usize,
     allocated_frames: usize,
     stream: CUstream,
-    /// need mutex to cover callbacks
-    // TODO(mbernat): Try to find out what this mutex is for
-    frames: Arc<Mutex<VecDeque<RawFrame<A>>>>,
+    // TODO(mbernat): This used to be wrapped in Arc<Mutex<_>>, find out why.
+    frames: VecDeque<RawFrame<A>>,
     picture_decode_index_mapping: [usize; 32],
     decoded_pictures: usize,
     operating_point: usize,
@@ -405,7 +402,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         // NOTE: this block takes negligible time
         let decoded_frame_ptr: *mut u8;
         {
-            let mut frames = self.frames.lock();
+            let frames = &mut self.frames;
             self.decoded_frames += 1;
             if self.decoded_frames > frames.len() {
                 // Not enough frames in stock
@@ -540,7 +537,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             allocated_frames: 0,
             device_frame_pitch: 0,
             stream: std::ptr::null_mut(),
-            frames: Arc::new(Mutex::new(VecDeque::new())),
+            frames: VecDeque::new(),
             picture_decode_index_mapping: [0; 32],
             decoded_pictures: 0,
             decoder: std::ptr::null_mut(),
@@ -586,7 +583,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         packet_data: &[u8],
         packet_flags: DecoderPacketFlags,
         packet_timestamp: i64,
-    ) -> Result<DecodingOutput<'_, A>, NvDecoderError> {
+    ) -> Result<DecodingOutput<impl Iterator<Item = Frame<'_, A>>>, NvDecoderError> {
         self.decoded_frames = 0;
         self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = packet_flags.into();
@@ -616,25 +613,16 @@ impl<A: FrameAllocator> NvDecoder<A> {
     }
 
     /// Panics if [`Self::frame_info`] hasn't been initialized yet by successful parsing.
-    fn get_decoding_output<'a>(&'a mut self) -> DecodingOutput<'a, A> {
-        let frames = self
-            .frames
-            .lock()
-            .drain(0..)
-            .map(|raw| {
-                // SAFETY: The frames are backed by this decoder, so they outlive 'a.
-                unsafe { raw.from_raw_parts() }
-            })
-            .collect();
+    fn get_decoding_output<'a>(&'a mut self) -> DecodingOutput<impl Iterator<Item = Frame<'a, A>>> {
+        let frames = self.frames.iter().map(|raw| {
+            // SAFETY: The frames are backed by this decoder, so they outlive 'a.
+            unsafe { raw.from_raw_parts() }
+        });
 
         let frame_info =
             self.frame_info.as_ref().expect("Frame info to be set by successful parsing.").clone();
 
-        DecodingOutput::new(frames, frame_info, self)
-    }
-
-    pub fn reclaim_frames<'a, 'b>(&'b mut self, frames: impl Iterator<Item = Frame<'a, A>>) {
-        self.frames.lock().extend(frames.map(|frame| RawFrame::into_raw_parts(frame)));
+        DecodingOutput { frames, frame_count: self.frames.len(), frame_info }
     }
 }
 
@@ -655,7 +643,7 @@ impl<A: FrameAllocator> Drop for NvDecoder<A> {
             }
         }
 
-        for frame in self.frames.lock().iter_mut() {
+        for frame in self.frames.iter_mut() {
             A::free(&mut frame.data);
         }
 
