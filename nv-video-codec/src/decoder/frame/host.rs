@@ -6,7 +6,7 @@ pub struct HostFrameAllocator;
 impl FrameAllocator for HostFrameAllocator {
     type Buffer = Vec<u8>;
 
-    fn alloc(frame_info: &FrameInfo, _device_frame_pitch: &mut usize) -> Self::Buffer {
+    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
         vec![0; frame_info.frame_size() as usize]
     }
 
@@ -24,6 +24,10 @@ impl RawBuffer for Vec<u8> {
 
     fn as_mut_ptr(&mut self) -> *mut u8 {
         Vec::as_mut_ptr(self)
+    }
+
+    fn pitch(&self) -> usize {
+        0
     }
 
     unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {

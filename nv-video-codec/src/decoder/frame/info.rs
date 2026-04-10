@@ -4,7 +4,7 @@ use crate::decoder::types::SurfaceFormat;
 #[derive(Clone)]
 pub struct FrameInfo {
     output_format: SurfaceFormat,
-    bpp: i32,
+    bpp: u32,
 
     /// output dimensions
     width: u32,
@@ -19,7 +19,7 @@ impl FrameInfo {
     /// Panics when the `width` or the `luma_height` is 0.
     pub fn new(
         output_format: SurfaceFormat,
-        bpp: i32,
+        bpp: u32,
         width: u32,
         luma_height: u32,
         video_info: String,
@@ -44,7 +44,8 @@ impl FrameInfo {
         }
     }
 
-    pub fn bpp(&self) -> i32 {
+    /// Bytes per pixel.
+    pub fn bpp(&self) -> u32 {
         self.bpp
     }
 
@@ -59,6 +60,10 @@ impl FrameInfo {
         }
     }
 
+    pub fn width_in_bytes(&self) -> usize {
+        (self.width() * self.bpp()) as usize
+    }
+
     pub fn height(&self) -> u32 {
         self.luma_height
     }
@@ -71,6 +76,10 @@ impl FrameInfo {
         self.chroma_height
     }
 
+    pub fn height_in_rows(&self) -> u32 {
+        self.luma_height + self.chroma_height * self.num_chroma_planes
+    }
+
     pub fn num_chroma_planes(&self) -> u32 {
         self.num_chroma_planes
     }
@@ -80,8 +89,6 @@ impl FrameInfo {
     }
 
     pub fn frame_size(&self) -> u32 {
-        self.width()
-            * (self.luma_height + self.chroma_height * self.num_chroma_planes)
-            * self.bpp as u32
+        self.width() * self.height_in_rows() * self.bpp
     }
 }

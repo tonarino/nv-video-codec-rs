@@ -42,7 +42,6 @@ pub struct NvDecoder<A: FrameAllocator> {
     ctx_lock: CUvideoctxlock,
     bitdepth_minus_8: i32,
     display_rect: Rect,
-    device_frame_pitch: usize,
 
     decoded_frames: usize,
     decoded_frames_returned: usize,
@@ -402,13 +401,15 @@ impl<A: FrameAllocator> NvDecoder<A> {
 
         // NOTE: this block takes negligible time
         let decoded_frame_ptr: *mut u8;
+        let mut pitch = 0;
         {
             let frames = &mut self.frames;
             self.decoded_frames += 1;
             if self.decoded_frames > frames.len() {
                 // Not enough frames in stock
                 self.allocated_frames += 1;
-                let data = A::alloc(frame_info, &mut self.device_frame_pitch);
+                let data = A::alloc(frame_info);
+                pitch = data.pitch();
                 frames.push_back(RawFrame { timestamp: disp_info.timestamp, buffer: data });
             }
             let frame_len = frames.len();
@@ -427,12 +428,8 @@ impl<A: FrameAllocator> NvDecoder<A> {
             dstMemoryType: A::memory_type(),
             dstHost: decoded_frame_ptr as *mut c_void,
             dstDevice: decoded_frame_ptr as CUdeviceptr,
-            dstPitch: if self.device_frame_pitch != 0 {
-                self.device_frame_pitch
-            } else {
-                (frame_info.width() * frame_info.bpp() as u32) as usize
-            },
-            WidthInBytes: (frame_info.width() * frame_info.bpp() as u32) as usize,
+            dstPitch: if pitch != 0 { pitch } else { frame_info.width_in_bytes() },
+            WidthInBytes: frame_info.width_in_bytes(),
             Height: frame_info.luma_height() as usize,
             ..Default::default()
         };
@@ -536,7 +533,6 @@ impl<A: FrameAllocator> NvDecoder<A> {
             decoded_frames: 0,
             decoded_frames_returned: 0,
             allocated_frames: 0,
-            device_frame_pitch: 0,
             stream: std::ptr::null_mut(),
             frames: VecDeque::new(),
             picture_decode_index_mapping: [0; 32],

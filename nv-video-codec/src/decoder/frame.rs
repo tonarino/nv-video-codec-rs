@@ -8,7 +8,7 @@ pub mod info;
 pub trait FrameAllocator {
     type Buffer: RawBuffer;
 
-    fn alloc(frame_info: &FrameInfo, device_frame_pitch: &mut usize) -> Self::Buffer;
+    fn alloc(frame_info: &FrameInfo) -> Self::Buffer;
 
     fn free(buffer: &mut Self::Buffer);
 
@@ -19,6 +19,8 @@ pub trait RawBuffer {
     type Slice<'a>;
 
     fn as_mut_ptr(&mut self) -> *mut u8;
+
+    fn pitch(&self) -> usize;
 
     /// # Safety
     ///

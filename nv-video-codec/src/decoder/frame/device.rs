@@ -12,15 +12,16 @@ pub struct DeviceFrameAllocator;
 impl FrameAllocator for DeviceFrameAllocator {
     type Buffer = RawDeviceBuffer;
 
-    fn alloc(frame_info: &FrameInfo, _device_frame_pitch: &mut usize) -> Self::Buffer {
-        let mut frame_data_device_ptr: CUdeviceptr = 0;
-        let len = frame_info.frame_size() as usize;
+    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
+        let mut ptr: CUdeviceptr = 0;
+        let pitch = frame_info.width_in_bytes();
+        let size = frame_info.frame_size() as usize;
 
         unsafe {
-            cuMemAlloc_v2(&mut frame_data_device_ptr, len).into_cuda_result().unwrap();
+            cuMemAlloc_v2(&mut ptr, size).into_cuda_result().unwrap();
         }
 
-        RawDeviceBuffer { ptr: frame_data_device_ptr as *mut u8, len }
+        RawDeviceBuffer { ptr: ptr as *mut u8, pitch, size }
     }
 
     fn free(buffer: &mut Self::Buffer) {
@@ -39,30 +40,28 @@ impl FrameAllocator for DeviceFrameAllocator {
 pub struct PitchedDeviceFrameAllocator;
 
 impl FrameAllocator for PitchedDeviceFrameAllocator {
-    // TODO(mbernat): Check if we need a different type here.
     type Buffer = RawDeviceBuffer;
 
-    fn alloc(frame_info: &FrameInfo, device_frame_pitch: &mut usize) -> Self::Buffer {
-        let mut frame_data_device_ptr: CUdeviceptr = 0;
-        let len = frame_info.frame_size() as usize;
+    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
+        let mut ptr: CUdeviceptr = 0;
+        let mut pitch = 0;
+        let size = frame_info.frame_size() as usize;
 
         // TODO(efyang): this should be a specialized type, pitched allocation is not like a normal array
         // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
         unsafe {
             cuMemAllocPitch_v2(
-                &mut frame_data_device_ptr,
-                device_frame_pitch,
-                (frame_info.width() * frame_info.bpp() as u32) as usize,
-                (frame_info.luma_height()
-                    + frame_info.chroma_height() * frame_info.num_chroma_planes())
-                    as usize,
+                &raw mut ptr,
+                &raw mut pitch,
+                frame_info.width_in_bytes(),
+                frame_info.height_in_rows() as usize,
                 16,
             )
             .into_cuda_result()
             .unwrap();
         }
 
-        RawDeviceBuffer { ptr: frame_data_device_ptr as *mut u8, len }
+        RawDeviceBuffer { ptr: ptr as *mut u8, pitch, size }
     }
 
     fn free(buffer: &mut Self::Buffer) {
@@ -86,6 +85,10 @@ impl RawBuffer for RawDeviceBuffer {
         self.ptr
     }
 
+    fn pitch(&self) -> usize {
+        self.pitch
+    }
+
     unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
         // SAFETY: `as_slice` caller guarantees the device slice is valid for `'a`.
         unsafe { self.as_device_slice() }
@@ -98,7 +101,8 @@ impl RawBuffer for RawDeviceBuffer {
 
 pub struct RawDeviceBuffer {
     pub ptr: *mut u8,
-    pub len: usize,
+    pub pitch: usize,
+    pub size: usize,
 }
 
 impl RawDeviceBuffer {
@@ -106,23 +110,33 @@ impl RawDeviceBuffer {
     ///
     /// Device memory backed by `self` has to be valid for `'a`.
     unsafe fn as_device_slice<'a>(&'a self) -> DeviceSlice<'a> {
-        DeviceSlice { ptr: self.ptr, len: self.len, _phantom_data: PhantomData }
+        DeviceSlice {
+            ptr: self.ptr,
+            pitch: self.pitch,
+            size: self.size,
+            _phantom_data: PhantomData,
+        }
     }
 }
 
 /// A slice of GPU device memory guaranteed to be valid for `'a`.
 pub struct DeviceSlice<'a> {
     ptr: *mut u8,
-    len: usize,
+    pitch: usize,
+    size: usize,
     _phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> DeviceSlice<'a> {
     fn into_raw_device_buffer(self) -> RawDeviceBuffer {
-        RawDeviceBuffer { ptr: self.ptr, len: self.len }
+        RawDeviceBuffer { ptr: self.ptr, pitch: self.pitch, size: self.size }
     }
 
     pub fn ptr(&self) -> *const u8 {
         self.ptr as *const u8
+    }
+
+    pub fn pitch(&self) -> usize {
+        self.pitch
     }
 }
