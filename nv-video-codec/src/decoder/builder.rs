@@ -4,7 +4,7 @@ use super::{
     types::{Codec, Dim, Rect},
     NvDecoder, NvDecoderError,
 };
-use crate::decoder::FrameAllocator;
+use crate::decoder::frame::FrameAllocator;
 
 pub struct NvDecoderBuilder {
     pub(super) context: Context,

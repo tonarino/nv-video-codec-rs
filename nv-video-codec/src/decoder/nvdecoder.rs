@@ -2,7 +2,8 @@ use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect,
 use crate::{
     common::cuda_result::IntoCudaResult,
     decoder::{
-        DecodingOutput, FrameAllocator, FrameInfo, NvDecoderBuilder, RawBuffer as _, RawFrame,
+        frame::{info::FrameInfo, DecodingOutput, Frame, FrameAllocator, RawBuffer as _, RawFrame},
+        NvDecoderBuilder,
     },
 };
 use ffi::{
@@ -25,7 +26,7 @@ use std::{
     time::Instant,
 };
 
-use super::{DecoderPacketFlags, Frame, NvDecoderError};
+use super::{DecoderPacketFlags, NvDecoderError};
 
 pub struct NvDecoder<A: FrameAllocator> {
     parser: CUvideoparser,

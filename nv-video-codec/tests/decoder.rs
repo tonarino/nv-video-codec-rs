@@ -4,7 +4,8 @@ extern crate simple_logger;
 
 use anyhow::Result;
 use nv_video_codec::decoder::{
-    DecoderPacketFlags, DeviceFrameAllocator, FrameAllocator, HostFrameAllocator, NvDecoderBuilder,
+    frame::{device::DeviceFrameAllocator, host::HostFrameAllocator, FrameAllocator},
+    DecoderPacketFlags, NvDecoderBuilder,
 };
 use rustacuda::{
     context::{Context, ContextFlags},
