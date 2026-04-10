@@ -408,13 +408,13 @@ impl<A: FrameAllocator> NvDecoder<A> {
                 // Not enough frames in stock
                 self.allocated_frames += 1;
                 let data = A::alloc(frame_info, &mut self.device_frame_pitch);
-                frames.push_back(RawFrame { timestamp: disp_info.timestamp, data });
+                frames.push_back(RawFrame { timestamp: disp_info.timestamp, buffer: data });
             }
             let frame_len = frames.len();
             // WARNING: This is a potential data race, as the mutex is unlocked when
             // decoded_frame_ptr is being worked with. This is present in the original code, so we copy that here
             // TODO(efyang) fix!
-            decoded_frame_ptr = frames[frame_len - 1].data.as_mut_ptr();
+            decoded_frame_ptr = frames[frame_len - 1].buffer.as_mut_ptr();
         }
 
         // NOTE: memcpys take about 1ms total here
@@ -644,7 +644,7 @@ impl<A: FrameAllocator> Drop for NvDecoder<A> {
         }
 
         for frame in self.frames.iter_mut() {
-            A::free(&mut frame.data);
+            A::free(&mut frame.buffer);
         }
 
         ContextStack::pop().unwrap();

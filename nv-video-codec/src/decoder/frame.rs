@@ -9,7 +9,7 @@ pub trait FrameAllocator {
 
     fn alloc(frame_info: &FrameInfo, device_frame_pitch: &mut usize) -> Self::Buffer;
 
-    fn free(data: &mut Self::Buffer);
+    fn free(buffer: &mut Self::Buffer);
 
     fn memory_type() -> CUmemorytype;
 }
@@ -23,7 +23,7 @@ impl FrameAllocator for HostFrameAllocator {
         vec![0; frame_info.frame_size() as usize]
     }
 
-    fn free(_data: &mut Self::Buffer) {
+    fn free(_buffer: &mut Self::Buffer) {
         // Handled by `Drop`.
     }
 
@@ -48,9 +48,9 @@ impl FrameAllocator for DeviceFrameAllocator {
         RawDeviceBuffer { ptr: frame_data_device_ptr as *mut u8, len }
     }
 
-    fn free(data: &mut Self::Buffer) {
+    fn free(buffer: &mut Self::Buffer) {
         unsafe {
-            cuMemFree_v2(data.ptr as CUdeviceptr)
+            cuMemFree_v2(buffer.ptr as CUdeviceptr)
                 .into_cuda_result()
                 .expect("Failure on nvdecoder frame free");
         }
@@ -90,10 +90,10 @@ impl FrameAllocator for PitchedDeviceFrameAllocator {
         RawDeviceBuffer { ptr: frame_data_device_ptr as *mut u8, len }
     }
 
-    fn free(data: &mut Self::Buffer) {
+    fn free(buffer: &mut Self::Buffer) {
         // TODO(mbernat): Make sure this is valid for pitched device frames.
         unsafe {
-            cuMemFree_v2(data.ptr as CUdeviceptr)
+            cuMemFree_v2(buffer.ptr as CUdeviceptr)
                 .into_cuda_result()
                 .expect("Failure on nvdecoder frame free");
         }
@@ -152,7 +152,7 @@ impl RawBuffer for RawDeviceBuffer {
 
 pub struct RawFrame<A: FrameAllocator> {
     pub timestamp: i64,
-    pub data: A::Buffer,
+    pub buffer: A::Buffer,
 }
 
 impl<A: FrameAllocator> RawFrame<A> {
@@ -160,22 +160,22 @@ impl<A: FrameAllocator> RawFrame<A> {
     ///
     /// Memory backed by `self` has to be valid for `'a`.
     pub unsafe fn from_raw_parts<'a>(&'a self) -> Frame<'a, A> {
-        // SAFETY: Caller guarantees self.data lives for 'a.
-        let data = unsafe { self.data.as_slice() };
+        // SAFETY: Caller guarantees self.buffer lives for 'a.
+        let slice = unsafe { self.buffer.as_slice() };
 
-        Frame { timestamp: self.timestamp, data }
+        Frame { timestamp: self.timestamp, slice }
     }
 
     pub fn into_raw_parts<'a>(frame: Frame<'a, A>) -> Self {
-        let data = RawBuffer::from_slice(frame.data);
+        let buffer = RawBuffer::from_slice(frame.slice);
 
-        RawFrame { timestamp: frame.timestamp, data }
+        RawFrame { timestamp: frame.timestamp, buffer }
     }
 }
 
 pub struct Frame<'a, A: FrameAllocator> {
     pub timestamp: i64,
-    pub data: <A::Buffer as RawBuffer>::Slice<'a>,
+    pub slice: <A::Buffer as RawBuffer>::Slice<'a>,
 }
 
 /// A slice of GPU device memory guaranteed to be valid for `'a`.
