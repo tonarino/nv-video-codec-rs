@@ -89,6 +89,6 @@ impl FrameInfo {
     }
 
     pub fn frame_size(&self) -> u32 {
-        self.width() * self.height_in_rows() * self.bpp
+        self.width_in_bytes() as u32 * self.height_in_rows()
     }
 }

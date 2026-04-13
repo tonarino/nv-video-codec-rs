@@ -2,7 +2,7 @@ use super::types::{ChromaFormat, Codec, CreateFlags, DeinterlaceMode, Dim, Rect,
 use crate::{
     common::cuda_result::IntoCudaResult,
     decoder::{
-        frame::{info::FrameInfo, DecodingOutput, Frame, FrameAllocator, RawBuffer as _, RawFrame},
+        frame::{info::FrameInfo, Buffer as _, DecodingOutput, Frame, FrameAllocator, OwnedFrame},
         NvDecoderBuilder,
     },
 };
@@ -48,7 +48,7 @@ pub struct NvDecoder<A: FrameAllocator> {
     allocated_frames: usize,
     stream: CUstream,
     // TODO(mbernat): This used to be wrapped in Arc<Mutex<_>>, find out why.
-    frames: VecDeque<RawFrame<A>>,
+    frames: VecDeque<OwnedFrame<A>>,
     picture_decode_index_mapping: [usize; 32],
     decoded_pictures: usize,
     operating_point: usize,
@@ -408,9 +408,10 @@ impl<A: FrameAllocator> NvDecoder<A> {
             if self.decoded_frames > frames.len() {
                 // Not enough frames in stock
                 self.allocated_frames += 1;
-                let data = A::alloc(frame_info);
+                let data =
+                    A::alloc(frame_info.width_in_bytes(), frame_info.height_in_rows() as usize);
                 pitch = data.pitch();
-                frames.push_back(RawFrame { timestamp: disp_info.timestamp, buffer: data });
+                frames.push_back(OwnedFrame { timestamp: disp_info.timestamp, buffer: data });
             }
             let frame_len = frames.len();
             // WARNING: This is a potential data race, as the mutex is unlocked when
@@ -640,9 +641,7 @@ impl<A: FrameAllocator> Drop for NvDecoder<A> {
             }
         }
 
-        for frame in self.frames.iter_mut() {
-            A::free(&mut frame.buffer);
-        }
+        self.frames.drain(..);
 
         ContextStack::pop().unwrap();
         unsafe {

@@ -5,17 +5,21 @@ pub mod device;
 pub mod host;
 pub mod info;
 
+/// This trait determines the frame allocation strategy.
 pub trait FrameAllocator {
-    type Buffer: RawBuffer;
+    /// Type of the memory [`Buffer`] backing the frame's image data.
+    type FrameBuffer: Buffer;
 
-    fn alloc(frame_info: &FrameInfo) -> Self::Buffer;
+    /// Allocate a buffer for a frame of the given size.
+    fn alloc(width_in_bytes: usize, height_in_rows: usize) -> Self::FrameBuffer;
 
-    fn free(buffer: &mut Self::Buffer);
-
+    /// CUDA memory type, primarily 'host' or 'device'.
     fn memory_type() -> CUmemorytype;
 }
 
-pub trait RawBuffer {
+/// This trait describes buffers produced by a [`FrameAllocator`].
+pub trait Buffer {
+    /// Type representing an immutable slice of the buffer's memory.
     type Slice<'a>
     where
         Self: 'a;
@@ -30,12 +34,13 @@ pub trait RawBuffer {
     unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a>;
 }
 
-pub struct RawFrame<A: FrameAllocator> {
+/// An owned and timestamped frame buffer.
+pub struct OwnedFrame<A: FrameAllocator> {
     pub timestamp: i64,
-    pub buffer: A::Buffer,
+    pub buffer: A::FrameBuffer,
 }
 
-impl<A: FrameAllocator> RawFrame<A> {
+impl<A: FrameAllocator> OwnedFrame<A> {
     /// # Safety
     ///
     /// Memory backed by `self` has to be valid for `'a`.
@@ -47,12 +52,13 @@ impl<A: FrameAllocator> RawFrame<A> {
     }
 }
 
+/// A borrowed and timestamped slice of a frame buffer.
 pub struct Frame<'a, A: FrameAllocator>
 where
-    A::Buffer: 'a,
+    A::FrameBuffer: 'a,
 {
     pub timestamp: i64,
-    pub slice: <A::Buffer as RawBuffer>::Slice<'a>,
+    pub slice: <A::FrameBuffer as Buffer>::Slice<'a>,
 }
 
 pub struct DecodingOutput<F> {

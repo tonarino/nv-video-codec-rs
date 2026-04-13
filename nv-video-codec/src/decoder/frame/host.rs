@@ -1,17 +1,16 @@
-use crate::decoder::frame::{info::FrameInfo, FrameAllocator, RawBuffer};
+use crate::decoder::frame::{Buffer, FrameAllocator};
 use nv_video_codec_sys::{CUmemorytype, CUmemorytype_enum};
 
+/// An allocator that produces frames backed by the host memory.
 pub struct HostFrameAllocator;
 
 impl FrameAllocator for HostFrameAllocator {
-    type Buffer = Vec<u8>;
+    type FrameBuffer = Vec<u8>;
 
-    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
-        vec![0; frame_info.frame_size() as usize]
-    }
+    fn alloc(width_in_bytes: usize, height_in_rows: usize) -> Self::FrameBuffer {
+        let size = width_in_bytes * height_in_rows;
 
-    fn free(_buffer: &mut Self::Buffer) {
-        // Handled by `Drop`.
+        vec![0; size]
     }
 
     fn memory_type() -> CUmemorytype {
@@ -19,7 +18,7 @@ impl FrameAllocator for HostFrameAllocator {
     }
 }
 
-impl RawBuffer for Vec<u8> {
+impl Buffer for Vec<u8> {
     type Slice<'a> = &'a [u8];
 
     fn as_mut_ptr(&mut self) -> *mut u8 {

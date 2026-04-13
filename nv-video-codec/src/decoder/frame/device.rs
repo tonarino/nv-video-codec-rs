@@ -1,35 +1,20 @@
 use crate::{
     common::IntoCudaResult as _,
-    decoder::frame::{info::FrameInfo, FrameAllocator, RawBuffer},
+    decoder::frame::{Buffer, FrameAllocator},
 };
 use nv_video_codec_sys::{
     cuMemAllocPitch_v2, cuMemAlloc_v2, cuMemFree_v2, CUdeviceptr, CUmemorytype, CUmemorytype_enum,
 };
 use std::marker::PhantomData;
 
+/// An allocator that produces frames backed by the CUDA device memory.
 pub struct DeviceFrameAllocator;
 
 impl FrameAllocator for DeviceFrameAllocator {
-    type Buffer = RawDeviceBuffer;
+    type FrameBuffer = DeviceBuffer;
 
-    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
-        let mut ptr: CUdeviceptr = 0;
-        let pitch = frame_info.width_in_bytes();
-        let size = frame_info.frame_size() as usize;
-
-        unsafe {
-            cuMemAlloc_v2(&mut ptr, size).into_cuda_result().unwrap();
-        }
-
-        RawDeviceBuffer { ptr: ptr as *mut u8, pitch, size }
-    }
-
-    fn free(buffer: &mut Self::Buffer) {
-        unsafe {
-            cuMemFree_v2(buffer.ptr as CUdeviceptr)
-                .into_cuda_result()
-                .expect("Failure on nvdecoder frame free");
-        }
+    fn alloc(width_in_bytes: usize, height_in_rows: usize) -> Self::FrameBuffer {
+        DeviceBuffer::alloc(width_in_bytes, height_in_rows)
     }
 
     fn memory_type() -> CUmemorytype {
@@ -37,40 +22,16 @@ impl FrameAllocator for DeviceFrameAllocator {
     }
 }
 
+/// An allocator that produces frames backed by the CUDA device memory.
+///
+/// The allocations are pitched (rows are padded).
 pub struct PitchedDeviceFrameAllocator;
 
 impl FrameAllocator for PitchedDeviceFrameAllocator {
-    type Buffer = RawDeviceBuffer;
+    type FrameBuffer = DeviceBuffer;
 
-    fn alloc(frame_info: &FrameInfo) -> Self::Buffer {
-        let mut ptr: CUdeviceptr = 0;
-        let mut pitch = 0;
-        let size = frame_info.frame_size() as usize;
-
-        // TODO(efyang): this should be a specialized type, pitched allocation is not like a normal array
-        // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
-        unsafe {
-            cuMemAllocPitch_v2(
-                &raw mut ptr,
-                &raw mut pitch,
-                frame_info.width_in_bytes(),
-                frame_info.height_in_rows() as usize,
-                16,
-            )
-            .into_cuda_result()
-            .unwrap();
-        }
-
-        RawDeviceBuffer { ptr: ptr as *mut u8, pitch, size }
-    }
-
-    fn free(buffer: &mut Self::Buffer) {
-        // TODO(mbernat): Make sure this is valid for pitched device frames.
-        unsafe {
-            cuMemFree_v2(buffer.ptr as CUdeviceptr)
-                .into_cuda_result()
-                .expect("Failure on nvdecoder frame free");
-        }
+    fn alloc(width_in_bytes: usize, height_in_rows: usize) -> Self::FrameBuffer {
+        DeviceBuffer::alloc_pitched(width_in_bytes, height_in_rows)
     }
 
     fn memory_type() -> CUmemorytype {
@@ -78,7 +39,7 @@ impl FrameAllocator for PitchedDeviceFrameAllocator {
     }
 }
 
-impl RawBuffer for RawDeviceBuffer {
+impl Buffer for DeviceBuffer {
     type Slice<'a> = DeviceSlice<'a>;
 
     fn as_mut_ptr(&mut self) -> *mut u8 {
@@ -95,13 +56,52 @@ impl RawBuffer for RawDeviceBuffer {
     }
 }
 
-pub struct RawDeviceBuffer {
-    pub ptr: *mut u8,
-    pub pitch: usize,
-    pub size: usize,
+pub struct DeviceBuffer {
+    ptr: *mut u8,
+    pitch: usize,
+    size: usize,
 }
 
-impl RawDeviceBuffer {
+/// An owned CUDA memory buffer.
+///
+/// TODO(mbernat): Upstream allocation methods into `cuda_gl_interop::CudaBuffer`.
+impl DeviceBuffer {
+    fn alloc(width_in_bytes: usize, frame_size: usize) -> Self {
+        let mut ptr: CUdeviceptr = 0;
+        let size = frame_size;
+        let pitch = width_in_bytes;
+
+        unsafe {
+            cuMemAlloc_v2(&mut ptr, size).into_cuda_result().unwrap();
+        }
+
+        Self { ptr: ptr as *mut u8, pitch, size }
+    }
+
+    fn alloc_pitched(width_in_bytes: usize, height_in_rows: usize) -> Self {
+        let mut ptr: CUdeviceptr = 0;
+        let mut pitch = 0;
+        let size = width_in_bytes * height_in_rows;
+
+        // TODO(efyang): this should be a specialized type, pitched allocation is not like a normal array
+        // refer to https://stackoverflow.com/questions/16119943/how-and-when-should-i-use-pitched-pointer-with-the-cuda-api
+        unsafe {
+            cuMemAllocPitch_v2(&raw mut ptr, &raw mut pitch, width_in_bytes, height_in_rows, 16)
+                .into_cuda_result()
+                .unwrap();
+        }
+
+        DeviceBuffer { ptr: ptr as *mut u8, pitch, size }
+    }
+
+    fn free(&mut self) {
+        unsafe {
+            cuMemFree_v2(self.ptr as CUdeviceptr)
+                .into_cuda_result()
+                .expect("Failure on nvdecoder frame free");
+        }
+    }
+
     /// # Safety
     ///
     /// Device memory backed by `self` has to be valid for `'a`.
@@ -115,7 +115,15 @@ impl RawDeviceBuffer {
     }
 }
 
-/// A slice of GPU device memory guaranteed to be valid for `'a`.
+impl Drop for DeviceBuffer {
+    fn drop(&mut self) {
+        self.free()
+    }
+}
+
+/// A slice of CUDA device memory guaranteed to be valid for `'a`.
+///
+/// TODO(mbernat): Replace by cuda_gl_interop::CudaSlice
 pub struct DeviceSlice<'a> {
     ptr: *mut u8,
     pitch: usize,
