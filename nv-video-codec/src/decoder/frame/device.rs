@@ -39,40 +39,23 @@ impl FrameAllocator for PitchedDeviceFrameAllocator {
     }
 }
 
-impl Buffer for DeviceBuffer {
-    type Slice<'a> = DeviceSlice<'a>;
-
-    fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.ptr
-    }
-
-    fn pitch(&self) -> usize {
-        self.pitch
-    }
-
-    unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
-        // SAFETY: `as_slice` caller guarantees the device slice is valid for `'a`.
-        unsafe { self.as_device_slice() }
-    }
-}
-
+/// An owned CUDA memory buffer.
+///
+/// TODO(mbernat): Upstream allocation methods into `cuda_gl_interop::CudaBuffer`.
 pub struct DeviceBuffer {
     ptr: *mut u8,
     pitch: usize,
     size: usize,
 }
 
-/// An owned CUDA memory buffer.
-///
-/// TODO(mbernat): Upstream allocation methods into `cuda_gl_interop::CudaBuffer`.
 impl DeviceBuffer {
-    fn alloc(width_in_bytes: usize, frame_size: usize) -> Self {
+    fn alloc(width_in_bytes: usize, height_in_rows: usize) -> Self {
         let mut ptr: CUdeviceptr = 0;
-        let size = frame_size;
+        let size = width_in_bytes * height_in_rows;
         let pitch = width_in_bytes;
 
         unsafe {
-            cuMemAlloc_v2(&mut ptr, size).into_cuda_result().unwrap();
+            cuMemAlloc_v2(&raw mut ptr, size).into_cuda_result().unwrap();
         }
 
         Self { ptr: ptr as *mut u8, pitch, size }
@@ -118,6 +101,23 @@ impl DeviceBuffer {
 impl Drop for DeviceBuffer {
     fn drop(&mut self) {
         self.free()
+    }
+}
+
+impl Buffer for DeviceBuffer {
+    type Slice<'a> = DeviceSlice<'a>;
+
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.ptr
+    }
+
+    fn pitch(&self) -> usize {
+        self.pitch
+    }
+
+    unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
+        // SAFETY: `as_slice` caller guarantees the device slice is valid for `'a`.
+        unsafe { self.as_device_slice() }
     }
 }
 
