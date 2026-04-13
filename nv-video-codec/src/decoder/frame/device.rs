@@ -85,9 +85,6 @@ impl DeviceBuffer {
         }
     }
 
-    /// # Safety
-    ///
-    /// Device memory backed by `self` has to be valid for `'a`.
     fn as_device_slice<'a>(&'a self) -> DeviceSlice<'a> {
         DeviceSlice {
             ptr: self.ptr,
