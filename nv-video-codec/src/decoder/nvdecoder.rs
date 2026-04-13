@@ -414,10 +414,11 @@ impl<A: FrameAllocator> NvDecoder<A> {
                 frames.push_back(OwnedFrame { timestamp: disp_info.timestamp, buffer: data });
             }
             let frame_len = frames.len();
-            // WARNING: This is a potential data race, as the mutex is unlocked when
-            // decoded_frame_ptr is being worked with. This is present in the original code, so we copy that here
-            // TODO(efyang) fix!
-            decoded_frame_ptr = frames[frame_len - 1].buffer.as_mut_ptr();
+
+            // SAFETY: This buffer has just been allocated and the pointer is only used to copy the
+            // luma and chroma data to it below. In particular, it's not used to deallocate or
+            // otherwise invalidate the buffer.
+            decoded_frame_ptr = unsafe { frames[frame_len - 1].buffer.as_mut_ptr() };
         }
 
         // NOTE: memcpys take about 1ms total here
@@ -612,10 +613,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
 
     /// Panics if [`Self::frame_info`] hasn't been initialized yet by successful parsing.
     fn get_decoding_output<'a>(&'a mut self) -> DecodingOutput<impl Iterator<Item = Frame<'a, A>>> {
-        let frames = self.frames.iter().map(|raw| {
-            // SAFETY: The frames are backed by this decoder, so they outlive 'a.
-            unsafe { raw.from_raw_parts() }
-        });
+        let frames = self.frames.iter().map(|raw| raw.from_raw_parts());
 
         let frame_info =
             self.frame_info.as_ref().expect("Frame info to be set by successful parsing.").clone();

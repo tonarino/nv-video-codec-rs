@@ -24,14 +24,18 @@ pub trait Buffer {
     where
         Self: 'a;
 
-    fn as_mut_ptr(&mut self) -> *mut u8;
+    /// # Safety
+    ///
+    /// The caller promises that the pointer will not be used to invalidate the buffer.
+    ///
+    /// NOTE: This technically does not need to be unsafe (compare [`Vec::as_mut_ptr()`]) because
+    /// it's the pointer's use, not existence, that causes problems. Still, it doesn't hurt to put
+    /// extra checks in place to make people more careful.
+    unsafe fn as_mut_ptr(&mut self) -> *mut u8;
 
     fn pitch(&self) -> usize;
 
-    /// # Safety
-    ///
-    /// Self::Slice<'a> must be valid for 'a.
-    unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a>;
+    fn as_slice<'a>(&'a self) -> Self::Slice<'a>;
 }
 
 /// An owned and timestamped frame buffer.
@@ -41,12 +45,8 @@ pub struct OwnedFrame<A: FrameAllocator> {
 }
 
 impl<A: FrameAllocator> OwnedFrame<A> {
-    /// # Safety
-    ///
-    /// Memory backed by `self` has to be valid for `'a`.
-    pub unsafe fn from_raw_parts<'a>(&'a self) -> Frame<'a, A> {
-        // SAFETY: Caller guarantees self.buffer lives for 'a.
-        let slice = unsafe { self.buffer.as_slice() };
+    pub fn from_raw_parts<'a>(&'a self) -> Frame<'a, A> {
+        let slice = self.buffer.as_slice();
 
         Frame { timestamp: self.timestamp, slice }
     }

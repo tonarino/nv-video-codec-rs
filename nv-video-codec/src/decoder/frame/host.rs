@@ -21,7 +21,7 @@ impl FrameAllocator for HostFrameAllocator {
 impl Buffer for Vec<u8> {
     type Slice<'a> = &'a [u8];
 
-    fn as_mut_ptr(&mut self) -> *mut u8 {
+    unsafe fn as_mut_ptr(&mut self) -> *mut u8 {
         Vec::as_mut_ptr(self)
     }
 
@@ -29,7 +29,7 @@ impl Buffer for Vec<u8> {
         0
     }
 
-    unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
+    fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
         Vec::as_slice(self)
     }
 }

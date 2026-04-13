@@ -88,7 +88,7 @@ impl DeviceBuffer {
     /// # Safety
     ///
     /// Device memory backed by `self` has to be valid for `'a`.
-    unsafe fn as_device_slice<'a>(&'a self) -> DeviceSlice<'a> {
+    fn as_device_slice<'a>(&'a self) -> DeviceSlice<'a> {
         DeviceSlice {
             ptr: self.ptr,
             pitch: self.pitch,
@@ -107,7 +107,8 @@ impl Drop for DeviceBuffer {
 impl Buffer for DeviceBuffer {
     type Slice<'a> = DeviceSlice<'a>;
 
-    fn as_mut_ptr(&mut self) -> *mut u8 {
+    // TODO(mbernat): Replace by `as_slice_mut`.
+    unsafe fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }
 
@@ -115,9 +116,8 @@ impl Buffer for DeviceBuffer {
         self.pitch
     }
 
-    unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
-        // SAFETY: `as_slice` caller guarantees the device slice is valid for `'a`.
-        unsafe { self.as_device_slice() }
+    fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
+        self.as_device_slice()
     }
 }
 
