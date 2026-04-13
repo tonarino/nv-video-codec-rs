@@ -16,7 +16,9 @@ pub trait FrameAllocator {
 }
 
 pub trait RawBuffer {
-    type Slice<'a>;
+    type Slice<'a>
+    where
+        Self: 'a;
 
     fn as_mut_ptr(&mut self) -> *mut u8;
 
@@ -26,8 +28,6 @@ pub trait RawBuffer {
     ///
     /// Self::Slice<'a> must be valid for 'a.
     unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a>;
-
-    fn from_slice<'a>(slice: Self::Slice<'a>) -> Self;
 }
 
 pub struct RawFrame<A: FrameAllocator> {
@@ -45,15 +45,12 @@ impl<A: FrameAllocator> RawFrame<A> {
 
         Frame { timestamp: self.timestamp, slice }
     }
-
-    pub fn into_raw_parts<'a>(frame: Frame<'a, A>) -> Self {
-        let buffer = RawBuffer::from_slice(frame.slice);
-
-        RawFrame { timestamp: frame.timestamp, buffer }
-    }
 }
 
-pub struct Frame<'a, A: FrameAllocator> {
+pub struct Frame<'a, A: FrameAllocator>
+where
+    A::Buffer: 'a,
+{
     pub timestamp: i64,
     pub slice: <A::Buffer as RawBuffer>::Slice<'a>,
 }

@@ -33,8 +33,4 @@ impl RawBuffer for Vec<u8> {
     unsafe fn as_slice<'a>(&'a self) -> Self::Slice<'a> {
         Vec::as_slice(self)
     }
-
-    fn from_slice<'a>(slice: Self::Slice<'a>) -> Self {
-        slice.to_vec()
-    }
 }

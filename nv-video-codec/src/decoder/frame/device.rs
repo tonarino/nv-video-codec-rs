@@ -93,10 +93,6 @@ impl RawBuffer for RawDeviceBuffer {
         // SAFETY: `as_slice` caller guarantees the device slice is valid for `'a`.
         unsafe { self.as_device_slice() }
     }
-
-    fn from_slice<'a>(slice: Self::Slice<'a>) -> Self {
-        slice.into_raw_device_buffer()
-    }
 }
 
 pub struct RawDeviceBuffer {
@@ -113,7 +109,7 @@ impl RawDeviceBuffer {
         DeviceSlice {
             ptr: self.ptr,
             pitch: self.pitch,
-            size: self.size,
+            _size: self.size,
             _phantom_data: PhantomData,
         }
     }
@@ -123,15 +119,11 @@ impl RawDeviceBuffer {
 pub struct DeviceSlice<'a> {
     ptr: *mut u8,
     pitch: usize,
-    size: usize,
+    _size: usize,
     _phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> DeviceSlice<'a> {
-    fn into_raw_device_buffer(self) -> RawDeviceBuffer {
-        RawDeviceBuffer { ptr: self.ptr, pitch: self.pitch, size: self.size }
-    }
-
     pub fn ptr(&self) -> *const u8 {
         self.ptr as *const u8
     }
