@@ -11,7 +11,7 @@ torture = []
 
 [dependencies]
 bitflags = "1.2"
-cuda-gl-interop = { version = "0.1.0", git = "https://github.com/tonarino/cuda-gl-interop", branch = "non-owned-slices" }
+cuda-gl-interop = { version = "0.1.0", git = "https://github.com/tonarino/cuda-gl-interop", branch = "euclid" }
 gl = "0.14"
 nv-video-codec-sys = { path = "../nv-video-codec-sys" }
 parking_lot = "0.11"

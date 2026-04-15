@@ -86,7 +86,7 @@ impl NvEncoder<NvEncoderCudaResourceManager> {
 
 impl<'a> From<&'a mut NvEncInputFrame> for CudaSliceMut<'a> {
     fn from(frame: &'a mut NvEncInputFrame) -> Self {
-        let resolution = Size { width: frame.width(), height: frame.height() };
+        let resolution = Size::new(frame.width(), frame.height());
         let buffer = frame.ptr() as *mut c_void;
         let pitch = frame.pitch() as usize;
 
