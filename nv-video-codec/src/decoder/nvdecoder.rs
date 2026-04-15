@@ -141,9 +141,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             nBitDepthMinus8: video_format.bit_depth_luma_minus8 as u32,
             ..Default::default()
         };
-        do_within_context(&self.context, || unsafe {
-            cuvidGetDecoderCaps(&mut decode_caps as *mut CUVIDDECODECAPS)
-        });
+        do_within_context(&self.context, || unsafe { cuvidGetDecoderCaps(&raw mut decode_caps) });
 
         if decode_caps.bIsSupported == 0 {
             // eprintln!("Codec not supported on this GPU");
@@ -556,7 +554,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             ulClockRate: builder.clock_rate,
             ulMaxDisplayDelay: if builder.low_latency { 0 } else { 1 },
 
-            pUserData: &mut *this as *mut NvDecoder<A> as *mut c_void,
+            pUserData: &raw mut *this as *mut c_void,
             pfnSequenceCallback: Some(handle_video_sequence_proc::<A>),
             pfnDecodePicture: Some(handle_picture_decode_proc::<A>),
             pfnDisplayPicture: Some(handle_picture_display_proc::<A>),
@@ -624,8 +622,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         }
 
         unsafe {
-            cuvidParseVideoData(self.parser, &mut packet as *mut CUVIDSOURCEDATAPACKET)
-                .into_cuda_result()?;
+            cuvidParseVideoData(self.parser, &raw mut packet).into_cuda_result()?;
         }
 
         self.stream = std::ptr::null_mut();
