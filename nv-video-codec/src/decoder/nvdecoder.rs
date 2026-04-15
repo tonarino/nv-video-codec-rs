@@ -431,7 +431,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             dstMemoryType: A::memory_type(),
             dstHost: decoded_frame_ptr as *mut c_void,
             dstDevice: decoded_frame_ptr as CUdeviceptr,
-            dstPitch: if pitch != 0 { pitch } else { frame_info.width_in_bytes() },
+            dstPitch: pitch,
             WidthInBytes: frame_info.width_in_bytes(),
             Height: frame_info.luma_height() as usize,
             ..Default::default()
