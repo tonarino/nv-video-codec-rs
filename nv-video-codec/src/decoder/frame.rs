@@ -33,8 +33,10 @@ pub trait Buffer {
     /// extra checks in place to make people more careful.
     unsafe fn as_mut_ptr(&mut self) -> *mut u8;
 
+    /// Width of a frame buffer in bytes including padding, if any.
     fn pitch(&self) -> usize;
 
+    /// Borrow the buffer immutably.
     fn as_slice<'a>(&'a self) -> Self::Slice<'a>;
 }
 
