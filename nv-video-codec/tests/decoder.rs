@@ -4,7 +4,9 @@ extern crate simple_logger;
 
 use anyhow::Result;
 use nv_video_codec::decoder::{
-    frame::{device::DeviceFrameAllocator, host::HostFrameAllocator, FrameAllocator},
+    frame::{
+        device::DeviceFrameAllocator, host::HostFrameAllocator, DecodingOutput, FrameAllocator,
+    },
     DecoderPacketFlags, NvDecoderBuilder,
 };
 use rustacuda::{
@@ -51,22 +53,20 @@ fn run_basic_decode(
         .build::<HostFrameAllocator>()?;
 
     let start = std::time::Instant::now();
-    let packet_timestamp = -1;
-    let mut decoding_output =
-        decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+    let mut decoding_output = DecodingOutput { frames: None, frame_count: 0, frame_info: None };
     let mut i = 0;
     // TODO(mbernat): This loop is very random, try to understand it better.
     // It has something to do with the latency settings and the decoding output for the current
     // packet only being available in the later `decode()` calls.
-    while i < DECODE_TRIES && decoding_output.frame_count == 0 {
+    while i < DECODE_TRIES && decoding_output.frames.is_none() {
         let packet_timestamp = i as i64;
-        drop(decoding_output);
         decoding_output =
-            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+            decoder.decode_one(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
 
         i += 1;
     }
-    let frame_info = &decoding_output.frame_info;
+
+    let frame_info = &decoding_output.frame_info.unwrap();
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
@@ -75,14 +75,8 @@ fn run_basic_decode(
     );
     assert!(frame_info.width() == expected_width);
     assert!(frame_info.height() == expected_height);
-    info_ctx!(
-        test_name,
-        "frames decoded: {}, in {:?}",
-        decoding_output.frame_count,
-        start.elapsed(),
-    );
-    assert!(!frame_info.video_info().is_empty());
-    let frame = decoding_output.frames.next().unwrap();
+    info_ctx!(test_name, "frames decoded: 1, in {:?}", start.elapsed(),);
+    let frame = decoding_output.frames.unwrap();
     info_ctx!(test_name, "Got frame of size: {}", frame.slice.len());
     assert!(!frame.slice.is_empty());
 
@@ -153,16 +147,17 @@ fn run_torture_test<FA: FrameAllocator>(
 
         let packet_timestamp = -1;
         let mut decoding_output =
-            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+            decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
         let mut i = 0;
         // TODO(mbernat): This loop is very random, try to understand it better.
         // It has something to do with the latency settings and the decoding output for the current
         // packet only being available in the later `decode()` calls.
         while i < DECODE_TRIES && decoding_output.frame_count == 0 {
             let packet_timestamp = i as i64;
+            // `decoding_output` borrows the decoder and has to be dropped before another decoding.
             drop(decoding_output);
             decoding_output =
-                decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+                decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
             i += 1;
         }
 
@@ -183,7 +178,7 @@ fn run_torture_test<FA: FrameAllocator>(
         }
 
         if timestamp == 0 {
-            let frame_info = &decoding_output.frame_info;
+            let frame_info = &decoding_output.frame_info.unwrap();
 
             info_ctx!(
                 test_name,
@@ -194,7 +189,6 @@ fn run_torture_test<FA: FrameAllocator>(
             assert!(frame_info.width() == expected_width);
             assert!(frame_info.height() == expected_height);
             assert!(total_frames_decoded > 0);
-            assert!(!frame_info.video_info().is_empty());
         }
     }
 

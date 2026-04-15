@@ -64,5 +64,5 @@ where
 pub struct DecodingOutput<F> {
     pub frames: F,
     pub frame_count: usize,
-    pub frame_info: FrameInfo,
+    pub frame_info: Option<FrameInfo>,
 }

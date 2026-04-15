@@ -1,7 +1,7 @@
 use crate::decoder::types::SurfaceFormat;
 
 // Frame format and dimensions
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct FrameInfo {
     output_format: SurfaceFormat,
     bpp: u32,
@@ -11,19 +11,11 @@ pub struct FrameInfo {
     luma_height: u32,
     chroma_height: u32,
     num_chroma_planes: u32,
-
-    video_info: String,
 }
 
 impl FrameInfo {
     /// Panics when the `width` or the `luma_height` is 0.
-    pub fn new(
-        output_format: SurfaceFormat,
-        bpp: u32,
-        width: u32,
-        luma_height: u32,
-        video_info: String,
-    ) -> Self {
+    pub fn new(output_format: SurfaceFormat, bpp: u32, width: u32, luma_height: u32) -> Self {
         assert!(width != 0);
         assert!(luma_height != 0);
 
@@ -31,17 +23,7 @@ impl FrameInfo {
             f64::ceil(luma_height as f64 * output_format.chroma_height_factor()) as u32;
         let num_chroma_planes = output_format.chroma_plane_count() as u32;
 
-        Self {
-            output_format,
-            bpp,
-
-            width,
-            luma_height,
-            chroma_height,
-            num_chroma_planes,
-
-            video_info,
-        }
+        Self { output_format, bpp, width, luma_height, chroma_height, num_chroma_planes }
     }
 
     /// Bytes per pixel.
@@ -82,10 +64,6 @@ impl FrameInfo {
 
     pub fn num_chroma_planes(&self) -> u32 {
         self.num_chroma_planes
-    }
-
-    pub fn video_info(&self) -> &str {
-        &self.video_info
     }
 
     pub fn frame_size(&self) -> u32 {

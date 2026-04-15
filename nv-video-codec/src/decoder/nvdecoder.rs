@@ -58,6 +58,7 @@ pub struct NvDecoder<A: FrameAllocator> {
     surface_width: u64,
 
     frame_info: Option<FrameInfo>,
+    video_info: String,
 }
 
 /// decoder refers to an NvDecoder
@@ -133,7 +134,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             return video_format.min_num_decode_surfaces as i32;
         }
 
-        let mut video_info = format!("Video Input Information:\n{:#?}", video_format);
+        self.video_info = format!("Video Input Information:\n{:#?}", video_format);
         let mut decode_caps = CUVIDDECODECAPS {
             eCodecType: video_format.codec,
             eChromaFormat: video_format.chroma_format,
@@ -289,7 +290,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         self.display_rect.right = video_decode_create_info.display_area.right as usize;
 
         // TODO(efyang) print decoding params
-        video_info += &format!("Video Decoding Params:\n{:#?}", video_decode_create_info);
+        self.video_info += &format!("Video Decoding Params:\n{:#?}", video_decode_create_info);
 
         // TODO(efyang)
         // don't know why this isn't in the original code, but this reduces runtime immensely
@@ -302,7 +303,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             });
         }
 
-        self.frame_info = Some(FrameInfo::new(output_format, bpp, width, luma_height, video_info));
+        self.frame_info = Some(FrameInfo::new(output_format, bpp, width, luma_height));
 
         println!("Session Initialization Time: {:?}", session_init_start.elapsed());
 
@@ -545,6 +546,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             surface_height: 0,
             surface_width: 0,
             frame_info: None,
+            video_info: String::new(),
         });
 
         // TODO: handle errors
@@ -577,12 +579,36 @@ impl<A: FrameAllocator> NvDecoder<A> {
         Ok(this)
     }
 
-    pub fn decode(
+    pub fn decode_one(
+        &mut self,
+        packet_data: &[u8],
+        packet_flags: DecoderPacketFlags,
+        packet_timestamp: i64,
+    ) -> Result<DecodingOutput<Option<Frame<'_, A>>>, NvDecoderError> {
+        self.decode_packet(packet_data, packet_flags, packet_timestamp)?;
+        let frame = self.frames.front().map(|raw| raw.from_raw_parts());
+
+        Ok(DecodingOutput { frames: frame, frame_count: 1, frame_info: self.frame_info })
+    }
+
+    pub fn decode_many(
         &mut self,
         packet_data: &[u8],
         packet_flags: DecoderPacketFlags,
         packet_timestamp: i64,
     ) -> Result<DecodingOutput<impl Iterator<Item = Frame<'_, A>>>, NvDecoderError> {
+        self.decode_packet(packet_data, packet_flags, packet_timestamp)?;
+        let frames = self.frames.iter().map(|raw| raw.from_raw_parts());
+
+        Ok(DecodingOutput { frames, frame_count: self.frames.len(), frame_info: self.frame_info })
+    }
+
+    fn decode_packet(
+        &mut self,
+        packet_data: &[u8],
+        packet_flags: DecoderPacketFlags,
+        packet_timestamp: i64,
+    ) -> Result<(), NvDecoderError> {
         self.decoded_frames = 0;
         self.decoded_frames_returned = 0;
         let flags: CUvideopacketflags::Type = packet_flags.into();
@@ -604,21 +630,11 @@ impl<A: FrameAllocator> NvDecoder<A> {
 
         self.stream = std::ptr::null_mut();
 
-        Ok(self.get_decoding_output())
+        Ok(())
     }
 
     pub fn set_reconfig_params() -> Result<(), NvDecoderError> {
         todo!()
-    }
-
-    /// Panics if [`Self::frame_info`] hasn't been initialized yet by successful parsing.
-    fn get_decoding_output<'a>(&'a mut self) -> DecodingOutput<impl Iterator<Item = Frame<'a, A>>> {
-        let frames = self.frames.iter().map(|raw| raw.from_raw_parts());
-
-        let frame_info =
-            self.frame_info.as_ref().expect("Frame info to be set by successful parsing.").clone();
-
-        DecodingOutput { frames, frame_count: self.frames.len(), frame_info }
     }
 }
 
