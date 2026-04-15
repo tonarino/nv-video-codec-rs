@@ -61,6 +61,7 @@ where
     pub slice: <A::FrameBuffer as Buffer>::Slice<'a>,
 }
 
+#[derive(Default)]
 pub struct DecodingOutput<F> {
     pub frames: F,
     pub frame_count: usize,

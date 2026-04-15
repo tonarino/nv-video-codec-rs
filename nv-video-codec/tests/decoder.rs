@@ -53,7 +53,7 @@ fn run_basic_decode(
         .build::<HostFrameAllocator>()?;
 
     let start = std::time::Instant::now();
-    let mut decoding_output = DecodingOutput { frames: None, frame_count: 0, frame_info: None };
+    let mut decoding_output = DecodingOutput::<Option<_>>::default();
     let mut i = 0;
     // TODO(mbernat): This loop is very random, try to understand it better.
     // It has something to do with the latency settings and the decoding output for the current
