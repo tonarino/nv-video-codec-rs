@@ -1,4 +1,5 @@
 #![allow(unused_variables, dead_code)]
+
 use super::{
     resource_manager::NvEncoderResourceManager, BufferFormat, IntoNvEncResult, NvEncError,
     NvEncoderError, NvEncoderResult,
@@ -17,7 +18,7 @@ use nv_video_codec_sys::{
     NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
     NV_ENC_REGISTER_RESOURCE,
 };
-use std::marker::PhantomData;
+use std::{ffi::c_void, marker::PhantomData};
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -57,7 +58,7 @@ pub struct Device {
 }
 
 #[repr(C)]
-pub(super) struct Input {
+pub struct Input {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
@@ -93,6 +94,7 @@ where
     max_encode_width: u32,
     max_encode_height: u32,
     _resource_manager: PhantomData<ResourceManager>,
+    pub(super) resource_context: ResourceManager::ResourceContext,
 }
 
 impl<ResourceManager> NvEncoder<ResourceManager>
@@ -165,11 +167,10 @@ where
         &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize]
     }
 
-    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource {
+    pub fn get_next_input_resource(&mut self) -> ResourceManager::InputResourceRef<'_> {
         let input_frame = &mut self.input_frames[(self.to_send % self.encoder_buffer) as usize];
-        let resource_ptr = input_frame.input_ptr as *mut ResourceManager::InputResource;
-        // SAFETY: The input resources are backed by `self`.
-        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
+
+        input_frame.into()
     }
 
     pub fn encode_frame(
@@ -469,14 +470,10 @@ where
     pub(super) fn new(
         device_type: NV_ENC_DEVICE_TYPE,
         device: *mut Device,
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-        extra_output_delay: u32,
-        motion_estimation_only: bool,
-        output_in_video_memory: bool,
+        resource_context: ResourceManager::ResourceContext,
+        settings: NvEncoderSettings,
     ) -> NvEncoderResult<Self> {
-        if width == 0 || height == 0 {
+        if settings.width == 0 || settings.height == 0 {
             return Err(NvEncError::InvalidParam.into());
         }
 
@@ -488,7 +485,7 @@ where
 
         let mut encode_session_ex_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
             version: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER,
-            device: device as *mut std::os::raw::c_void,
+            device: device as *mut c_void,
             deviceType: device_type,
             apiVersion: NVENCAPI_VERSION,
             ..NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default()
@@ -504,6 +501,15 @@ where
             )
             .into_nvenc_result()?;
         }
+
+        let NvEncoderSettings {
+            width,
+            height,
+            buffer_format,
+            extra_output_delay,
+            motion_estimation_only,
+            output_in_video_memory,
+        } = settings;
 
         Ok(Self {
             motion_estimation_only,
@@ -533,6 +539,7 @@ where
             max_encode_width: width,
             max_encode_height: height,
             _resource_manager: PhantomData,
+            resource_context,
         })
     }
 
@@ -545,7 +552,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub(super) fn register_input_resources(
         &mut self,
-        input_frames: &mut [Box<ResourceManager::InputResource>], // TODO: make this not mut
+        input_frame_ptrs: impl Iterator<Item = *mut Input>,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -553,9 +560,9 @@ where
         buffer_format: BufferFormat,
         reference_frame: bool,
     ) -> NvEncoderResult<()> {
-        for input_frame in input_frames.iter_mut() {
+        for input_frame_ptr in input_frame_ptrs {
             let registered_ptr = self.register_resource(
-                input_frame,
+                input_frame_ptr,
                 resource_type,
                 width,
                 height,
@@ -567,8 +574,11 @@ where
             let mut chroma_offsets =
                 self.buffer_format.get_chroma_subplane_offsets(pitch, height)?;
             chroma_offsets.resize(2, 0);
+
             let registered_input_frame = NvEncInputFrame {
-                input_ptr: &raw mut *input_frame.as_mut() as *mut Input,
+                width,
+                height,
+                input_ptr: input_frame_ptr,
                 chroma_offsets: [chroma_offsets[0], chroma_offsets[1]],
                 num_chroma_planes: self.buffer_format.get_num_chroma_planes()?,
                 pitch,
@@ -646,7 +656,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn register_resource(
         &mut self,
-        buffer: &mut ResourceManager::InputResource,
+        input_frame_ptr: *mut Input,
         resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
         width: u32,
         height: u32,
@@ -657,7 +667,7 @@ where
         let mut register_resource = NV_ENC_REGISTER_RESOURCE {
             version: NV_ENC_REGISTER_RESOURCE_VER,
             resourceType: resource_type,
-            resourceToRegister: &raw mut *buffer as *mut _,
+            resourceToRegister: input_frame_ptr as *mut c_void,
             width,
             height,
             pitch,
@@ -1029,11 +1039,64 @@ where
 // TODO: clean this struct up
 #[derive(Debug)]
 pub struct NvEncInputFrame {
-    pub(super) input_ptr: *mut Input, // Originally a void pointer
+    width: u32,
+    height: u32,
+    input_ptr: *mut Input, // Originally a void pointer
     chroma_offsets: [u32; 2],
     num_chroma_planes: u32,
     pitch: u32,
     chroma_pitch: u32,
     buffer_format: BufferFormat,
     resource_type: NV_ENC_INPUT_RESOURCE_TYPE,
+}
+
+impl NvEncInputFrame {
+    pub fn ptr(&self) -> *mut Input {
+        self.input_ptr
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn pitch(&self) -> u32 {
+        self.pitch
+    }
+}
+
+pub struct NvEncoderSettings {
+    width: u32,
+    height: u32,
+    buffer_format: BufferFormat,
+    extra_output_delay: u32,
+    motion_estimation_only: bool,
+    output_in_video_memory: bool,
+}
+
+impl NvEncoderSettings {
+    builder_field_setter!(extra_output_delay: u32);
+
+    builder_field_setter!(motion_estimation_only: bool);
+
+    builder_field_setter!(output_in_video_memory: bool);
+
+    pub fn new(width: u32, height: u32, buffer_format: BufferFormat) -> Self {
+        // Note: this was originally set to 3 in NvEncoderGL.h by default
+        // Absolutely necessary for performance
+        // Three shall be the number thou shalt count, and the number of counting shall be three.
+        let extra_output_delay = 3;
+
+        Self {
+            width,
+            height,
+            buffer_format,
+            extra_output_delay,
+            motion_estimation_only: false,
+            output_in_video_memory: false,
+        }
+    }
 }

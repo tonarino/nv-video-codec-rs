@@ -24,7 +24,7 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
     pub fn create_encoder(&mut self, encoder_params: &NvEncoderParams) -> NvEncoderResult<()>;
     pub fn destroy_encoder(&mut self) -> NvEncoderResult<()>;
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame;
-    pub fn get_next_input_resource(&mut self) -> &mut ResourceManager::InputResource;
+    pub fn get_next_input_resource(&mut self) -> ResourceManager::InputResourceRef<'_>;
     pub fn encode_frame(
         &mut self,
         packet: &mut Vec<&[u8]>,
@@ -35,7 +35,8 @@ impl<ResourceManager> NvEncoder<ResourceManager> {
 ```
 
 Method `get_next_input_resource()` provides a GPU resource that should be used as a target
-to upload the frame data. Afterwards, `encode_frame()` provides packets of the encoded frame.
+to upload the frame data. Once uploaded, `encode_frame()` processes the frame and returns
+the encoded data.
 
 ### NvEncoderResourceManager
 
@@ -58,12 +59,9 @@ pub trait NvEncoderResourceManager {
 
 This is a thin wrapper over `NvEncoder<NvEncoderGLResourceManager>` that can be used to feed the encoder with OpenGL textures.
 
-This type additionally implements `fn NvEncoderExt::encode_frame_from_data()` that combines
-`get_next_input_frame()`, OpenGL texture upload and `encode_frame()` as a convenience.
-
 ### Decoding
 
-The decoder uses a very different architecture (possibly reflecting the underlying SDK).
+The decoder uses a different architecture reflecting the underlying SDK.
 
 ```rust
 struct NvDecoder { ... }

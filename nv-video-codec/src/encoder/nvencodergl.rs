@@ -1,9 +1,11 @@
 use super::{
     nvencoder::NvEncoder, resource_manager::NvEncoderResourceManager, types::BufferFormat,
-    NvEncoderExt, NvEncoderGLBuilder, NvEncoderResult,
+    NvEncoderResult,
 };
-use crate::encoder::EncodePicFlags;
-use nv_video_codec_sys::{_NV_ENC_DEVICE_TYPE, NV_ENC_INPUT_RESOURCE_OPENGL_TEX};
+use crate::encoder::nvencoder::{Input, NvEncInputFrame, NvEncoderSettings};
+use nv_video_codec_sys::{
+    _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+};
 use std::ops::{Deref, DerefMut};
 
 pub struct NvEncoderGL {
@@ -24,60 +26,15 @@ impl DerefMut for NvEncoderGL {
     }
 }
 
-impl NvEncoderExt for NvEncoderGL {
-    fn encode_frame_from_data(
-        &mut self,
-        data: &[u8],
-        width: u32,
-        height: u32,
-        pic_flags: EncodePicFlags,
-        output_packet_buffer: &mut Vec<&[u8]>,
-    ) -> NvEncoderResult<()> {
-        let resource = self.get_next_input_resource();
-        // TODO: remove these hacks
-        unsafe {
-            gl::BindTexture(resource.target, resource.texture);
-            gl::TexSubImage2D(
-                resource.target,
-                0,                         // level
-                0,                         // x offset
-                0,                         // y offset
-                width as i32,              // width
-                (height * 3 / 2) as i32,   // height
-                gl::RED,                   // format (single-channel)
-                gl::UNSIGNED_BYTE,         // type
-                data.as_ptr() as *const _, // data
-            );
-            gl::BindTexture(resource.target, 0);
-        }
-
-        self.encode_frame(output_packet_buffer, pic_flags)
-    }
-}
-
 impl NvEncoderGL {
-    pub fn builder(width: u32, height: u32, buffer_format: BufferFormat) -> NvEncoderGLBuilder {
-        NvEncoderGLBuilder::new(width, height, buffer_format)
-    }
-
-    pub fn new(
-        width: u32,
-        height: u32,
-        buffer_format: BufferFormat,
-        extra_output_delay: u32,
-        motion_extimation_only: bool,
-    ) -> NvEncoderResult<Self> {
+    pub fn new(settings: NvEncoderSettings) -> NvEncoderResult<Self> {
         // TODO: remove this unwrap
         Ok(Self {
             encoder: NvEncoder::new(
                 _NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_OPENGL,
                 std::ptr::null_mut(),
-                width,
-                height,
-                buffer_format,
-                extra_output_delay,
-                motion_extimation_only,
-                false,
+                (),
+                settings,
             )?,
         })
     }
@@ -91,7 +48,7 @@ impl NvEncoder<NvEncoderGLResourceManager> {
         self.unregister_input_resources()?;
 
         for input_frame in self.input_frames.iter() {
-            let resource_ptr = input_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = input_frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
             if !resource_ptr.is_null() {
                 unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
                 // TODO(efyang) check for possible memory leak here (vs original delete)
@@ -100,7 +57,7 @@ impl NvEncoder<NvEncoderGLResourceManager> {
         self.input_frames.clear();
 
         for reference_frame in self.reference_frames.iter() {
-            let resource_ptr = reference_frame.input_ptr as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+            let resource_ptr = reference_frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
             if !resource_ptr.is_null() {
                 unsafe { gl::DeleteTextures(1, &(*resource_ptr).texture) }
             }
@@ -110,10 +67,22 @@ impl NvEncoder<NvEncoderGLResourceManager> {
     }
 }
 
+// TODO: wrap the user facing type
+impl<'a> From<&'a mut NvEncInputFrame> for &'a mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+    fn from(frame: &'a mut NvEncInputFrame) -> Self {
+        let resource_ptr = frame.ptr() as *mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+
+        // SAFETY: The input resources are valid for 'a.
+        unsafe { resource_ptr.as_mut() }.expect("Input resource to exist")
+    }
+}
+
 pub struct NvEncoderGLResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     type InputResource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+    type InputResourceRef<'a> = &'a mut NV_ENC_INPUT_RESOURCE_OPENGL_TEX;
+    type ResourceContext = ();
 
     fn allocate_input_buffers(
         encoder: &mut NvEncoder<Self>,
@@ -157,17 +126,22 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
                     gl::BindTexture(gl::TEXTURE_RECTANGLE, 0);
                 }
 
-                let resource = Box::new(NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
+                let resource = NV_ENC_INPUT_RESOURCE_OPENGL_TEX {
                     texture: tex,
                     target: gl::TEXTURE_RECTANGLE,
-                });
+                };
 
                 input_frames.push(resource);
             }
 
+            // TODO: do not leak but store until `release_input_buffers()` is called.
+            let input_frame_ptrs = input_frames
+                .leak()
+                .iter_mut()
+                .map(|input_frame| input_frame as *mut _ as *mut Input);
+
             encoder.register_input_resources(
-                    // TODO: do not leak but store until `release_input_buffers()` is called.
-                    input_frames.leak(),
+                    input_frame_ptrs,
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),
@@ -181,5 +155,37 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
 
     fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> NvEncoderResult<()> {
         encoder.release_gl_resources()
+    }
+}
+
+pub fn upload_nv12_data_to_texture_resource(
+    data: &[u8],
+    // TODO: wrap FFI type
+    resource: &mut _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+    width: u32,
+    height: u32,
+) {
+    // NV12 data layout:
+    // - 8-bit width x height luma plane
+    // - 2 8-bit width/2 x height/2 chroma planes (each chroma value is shared by a 2x2 pixel block)
+    //   - when the chroma planes are interleaved, this results in 1 8-bit width x height/2 plane
+    let width = width as i32;
+    let luma_height = height as i32;
+    let chroma_height = height as i32 / 2;
+
+    unsafe {
+        gl::BindTexture(resource.target, resource.texture);
+        gl::TexSubImage2D(
+            resource.target,
+            0,                           // level
+            0,                           // x offset
+            0,                           // y offset
+            width,                       // width
+            luma_height + chroma_height, // height
+            gl::RED,                     // format (single-channel)
+            gl::UNSIGNED_BYTE,           // type
+            data.as_ptr() as *const _,   // data
+        );
+        gl::BindTexture(resource.target, 0);
     }
 }

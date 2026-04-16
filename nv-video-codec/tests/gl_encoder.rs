@@ -3,16 +3,13 @@ extern crate gl;
 extern crate log;
 extern crate simple_logger;
 
-#[path = "utils.rs"]
-#[macro_use]
-mod utils;
-
 use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
-        EncodeTuningInfo, NvEncoderExt, NvEncoderGL, NvEncoderParams,
+        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodePicFlags,
+        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderGL, NvEncoderParams,
+        NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -21,6 +18,10 @@ use std::{
     io::Write,
     time::{Duration, Instant},
 };
+
+#[path = "utils.rs"]
+#[macro_use]
+mod utils;
 
 struct GlEncoderContext {
     encoder: NvEncoderGL,
@@ -40,8 +41,8 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Gl
     };
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let encoder =
-        NvEncoderGL::builder(width, height, format).build().expect("Could not create NvEncoderGl");
+    let settings = NvEncoderSettings::new(width, height, format);
+    let encoder = NvEncoderGL::new(settings).expect("Could not create NvEncoderGl");
 
     Ok(GlEncoderContext { encoder, _context: context })
 }
@@ -98,25 +99,14 @@ fn encode_single_frame_grayscale() -> Result<()> {
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
     let resource = encoder.get_next_input_resource();
-    // TODO: remove these hacks
-    unsafe {
-        gl::BindTexture(resource.target, resource.texture);
-        gl::TexSubImage2D(
-            resource.target,
-            0,                         // level
-            0,                         // x offset
-            0,                         // y offset
-            width as i32,              // width
-            (height * 3 / 2) as i32,   // height
-            gl::RED,                   // format (single-channel)
-            gl::UNSIGNED_BYTE,         // type
-            data.as_ptr() as *const _, // data
-        );
-        gl::BindTexture(resource.target, 0);
-    }
+    upload_nv12_data_to_texture_resource(data, resource, width, height);
+
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
 
+    // TODO(mbernat): This produces an empty file, unlike `encode_multi_frame_3k()`, which works.
+    // The difference is that the latter method encodes the data 5 times in a loop. Another weird
+    // latency issue?
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
         f.write_all(frame)?;
@@ -146,6 +136,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     const NUM_TORTURE_FRAMES: usize = 500;
     #[cfg(not(feature = "torture"))]
     const NUM_TORTURE_FRAMES: usize = 5;
+
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
@@ -153,7 +144,9 @@ fn encode_multi_frame_3k() -> Result<()> {
     let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
-        encoder.encode_frame_from_data(data, width, height, pic_flags, &mut packet)?;
+        let resource = encoder.get_next_input_resource();
+        upload_nv12_data_to_texture_resource(data, resource, width, height);
+        encoder.encode_frame(&mut packet, pic_flags)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();
@@ -166,9 +159,6 @@ fn encode_multi_frame_3k() -> Result<()> {
                 blocked_time / 500
             );
             blocked_time = Duration::from_millis(0);
-        }
-        while start_time.elapsed() < Duration::from_millis(1000) / 60 {
-            std::thread::sleep(Duration::from_micros(10));
         }
     }
     info_ctx!(
