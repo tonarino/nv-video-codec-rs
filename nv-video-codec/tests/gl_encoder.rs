@@ -156,9 +156,6 @@ fn encode_multi_frame_3k() -> Result<()> {
             );
             blocked_time = Duration::from_millis(0);
         }
-        while start_time.elapsed() < Duration::from_millis(1000) / 60 {
-            std::thread::sleep(Duration::from_micros(10));
-        }
     }
     info_ctx!(
         "encode_multi",

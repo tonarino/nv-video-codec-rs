@@ -110,13 +110,13 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
             // TODO(efyang): make this an error
             panic!("Encoder device not initialized");
         }
-        let num_count = if encoder.motion_estimation_only { 2 } else { 1 };
+        let num_buffers = if encoder.motion_estimation_only { 2 } else { 1 };
         let pixel_format = encoder.get_pixel_format();
 
-        // NvEncoderCuda stores the pitch as a class member. Should we?
-        let mut device_frame_pitch = 0;
+        // Pitch shared by all the frame allocations.
+        let mut pitch = 0;
 
-        for count in 0..num_count {
+        for buffer_index in 0..num_buffers {
             ContextStack::push(&encoder.resource_context).unwrap();
 
             let mut input_frames = Vec::new();
@@ -130,6 +130,8 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
                     };
 
                 let mut device_frame_ptr: CUdeviceptr = 0;
+                let mut device_frame_pitch = 0;
+                let element_size_in_bytes = 16;
 
                 unsafe {
                     cuMemAllocPitch_v2(
@@ -137,10 +139,16 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
                         &raw mut device_frame_pitch,
                         pixel_format.get_width_in_bytes(encoder.get_max_encode_width())? as usize,
                         (encoder.get_max_encode_height() + chroma_height) as usize,
-                        16,
+                        element_size_in_bytes,
                     )
                     .into_cuda_result()
                     .unwrap();
+                }
+
+                if pitch == 0 {
+                    pitch = device_frame_pitch;
+                } else {
+                    assert_eq!(pitch, device_frame_pitch);
                 }
 
                 input_frames.push(device_frame_ptr);
@@ -152,14 +160,16 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
             let input_frame_ptrs =
                 input_frames.leak().iter_mut().map(|input_frame| *input_frame as *mut Input);
 
+            let is_reference_frame = buffer_index == 1;
+
             encoder.register_input_resources(
                     input_frame_ptrs,
                     nv_video_codec_sys::NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR,
                     encoder.get_max_encode_width(),
                     encoder.get_max_encode_height(),
-                    device_frame_pitch as u32,
+                    pitch as u32,
                     pixel_format,
-                    count == 1
+                    is_reference_frame
                 )?;
         }
         Ok(())
