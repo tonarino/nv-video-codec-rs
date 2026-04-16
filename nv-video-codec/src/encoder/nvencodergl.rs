@@ -167,8 +167,8 @@ pub fn upload_nv12_data_to_texture_resource(
 ) {
     // NV12 data layout:
     // - 8-bit width x height luma plane
-    // - 2 2-bit width x height chroma planes (each chroma value is shared by a 2x2 pixel block)
-    //   - when the chroma planes are interleaved, this results in 1 4-bit width x height / 2 plane
+    // - 2 8-bit width/2 x height/2 chroma planes (each chroma value is shared by a 2x2 pixel block)
+    //   - when the chroma planes are interleaved, this results in 1 8-bit width x height/2 plane
     let width = width as i32;
     let luma_height = height as i32;
     let chroma_height = height as i32 / 2;
