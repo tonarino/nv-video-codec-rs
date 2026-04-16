@@ -7,8 +7,9 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, upload_data_to_texture_resource, EncodePicFlags, EncodeRateControl,
-        EncodeRateControlMode, EncodeTuningInfo, NvEncoderGL, NvEncoderParams, NvEncoderSettings,
+        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodePicFlags,
+        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderGL, NvEncoderParams,
+        NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -98,11 +99,14 @@ fn encode_single_frame_grayscale() -> Result<()> {
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
     let resource = encoder.get_next_input_resource();
-    upload_data_to_texture_resource(data, resource, width, height);
+    upload_nv12_data_to_texture_resource(data, resource, width, height);
 
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
 
+    // TODO(mbernat): This produces an empty file, unlike `encode_multi_frame_3k()`, which works.
+    // The difference is that the latter method encodes the data 5 times in a loop. Another weird
+    // latency issue?
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
         f.write_all(frame)?;
@@ -141,7 +145,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
         let resource = encoder.get_next_input_resource();
-        upload_data_to_texture_resource(data, resource, width, height);
+        upload_nv12_data_to_texture_resource(data, resource, width, height);
         encoder.encode_frame(&mut packet, pic_flags)?;
 
         frames_encoded += 1;

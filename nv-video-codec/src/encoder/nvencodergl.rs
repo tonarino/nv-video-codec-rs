@@ -158,26 +158,33 @@ impl NvEncoderResourceManager for NvEncoderGLResourceManager {
     }
 }
 
-pub fn upload_data_to_texture_resource(
+pub fn upload_nv12_data_to_texture_resource(
     data: &[u8],
     // TODO: wrap FFI type
     resource: &mut _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
     width: u32,
     height: u32,
 ) {
-    // TODO: remove these hacks
+    // NV12 data layout:
+    // - 8-bit width x height luma plane
+    // - 2 2-bit width x height chroma planes (each chroma value is shared by a 2x2 pixel block)
+    //   - when the chroma planes are interleaved, this results in 1 4-bit width x height / 2 plane
+    let width = width as i32;
+    let luma_height = height as i32;
+    let chroma_height = height as i32 / 2;
+
     unsafe {
         gl::BindTexture(resource.target, resource.texture);
         gl::TexSubImage2D(
             resource.target,
-            0,                         // level
-            0,                         // x offset
-            0,                         // y offset
-            width as i32,              // width
-            (height * 3 / 2) as i32,   // height
-            gl::RED,                   // format (single-channel)
-            gl::UNSIGNED_BYTE,         // type
-            data.as_ptr() as *const _, // data
+            0,                           // level
+            0,                           // x offset
+            0,                           // y offset
+            width,                       // width
+            luma_height + chroma_height, // height
+            gl::RED,                     // format (single-channel)
+            gl::UNSIGNED_BYTE,           // type
+            data.as_ptr() as *const _,   // data
         );
         gl::BindTexture(resource.target, 0);
     }
