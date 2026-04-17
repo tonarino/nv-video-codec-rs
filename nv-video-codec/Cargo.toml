@@ -15,7 +15,7 @@ cuda-gl-interop = { version = "0.1.0", git = "https://github.com/tonarino/cuda-g
 gl = "0.14"
 nv-video-codec-sys = { path = "../nv-video-codec-sys" }
 parking_lot = "0.11"
-cudarc = { version = "0.19", features = ["cuda-version-from-build-system"] }
+cudarc = { version = "0.19", features = ["cuda-version-from-build-system", "dynamic-linking"] }
 thiserror = "1.0"
 
 [dev-dependencies]
