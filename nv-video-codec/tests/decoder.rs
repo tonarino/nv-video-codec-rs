@@ -3,7 +3,12 @@ extern crate log;
 extern crate simple_logger;
 
 use anyhow::Result;
-use nv_video_codec::decoder::{DecoderPacketFlags, NvDecoder};
+use nv_video_codec::decoder::{
+    frame::{
+        device::DeviceFrameAllocator, host::HostFrameAllocator, DecodingOutput, FrameAllocator,
+    },
+    DecoderPacketFlags, NvDecoderBuilder,
+};
 use rustacuda::{
     context::{Context, ContextFlags},
     device::Device,
@@ -30,8 +35,8 @@ fn init_cuda_ctx() -> Result<Context> {
 #[test]
 fn init_decoder() -> Result<()> {
     let context = init_cuda_ctx()?;
-    let decoder =
-        NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC).build()?;
+    let decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<HostFrameAllocator>()?;
     std::mem::drop(decoder);
     Ok(())
 }
@@ -41,29 +46,27 @@ fn run_basic_decode(
     data: &[u8],
     expected_width: u32,
     expected_height: u32,
-    use_device_frame: bool,
 ) -> Result<Vec<u8>> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
-        .use_device_frame(use_device_frame)
-        .build()?;
+    let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<HostFrameAllocator>()?;
 
     let start = std::time::Instant::now();
-    let packet_timestamp = -1;
-    let mut decoding_output =
-        decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+    let mut decoding_output = DecodingOutput::<Option<_>>::default();
     let mut i = 0;
     // TODO(mbernat): This loop is very random, try to understand it better.
     // It has something to do with the latency settings and the decoding output for the current
     // packet only being available in the later `decode()` calls.
-    while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+    while i < DECODE_TRIES && decoding_output.frames.is_none() {
         let packet_timestamp = i as i64;
         decoding_output =
-            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+            decoder.decode_one(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+
         i += 1;
     }
-    let frame_info = &decoding_output.frame_info;
+
+    let frame_info = &decoding_output.frame_info.unwrap();
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
@@ -72,43 +75,37 @@ fn run_basic_decode(
     );
     assert!(frame_info.width() == expected_width);
     assert!(frame_info.height() == expected_height);
-    info_ctx!(
-        test_name,
-        "frames decoded: {}, in {:?}",
-        decoding_output.frames.len(),
-        start.elapsed(),
-    );
-    assert!(!frame_info.video_info().is_empty());
-    let frame = decoding_output.frames.pop_front().unwrap();
-    info_ctx!(test_name, "Got frame of size: {}", frame.data.as_ref().len());
-    assert!(!frame.data.as_ref().is_empty());
+    info_ctx!(test_name, "frames decoded: 1, in {:?}", start.elapsed(),);
+    let frame = decoding_output.frames.unwrap();
+    info_ctx!(test_name, "Got frame of size: {}", frame.slice.len());
+    assert!(!frame.slice.is_empty());
 
     // NOTE: frames can be checked with https://rawpixels.net/
     // std::fs::write("decode_out_grayscale.nv12", &frame.data)?;
 
     let mut out_vec = Vec::new();
-    out_vec.extend_from_slice(frame.data.as_ref());
+    out_vec.extend_from_slice(&frame.slice);
     Ok(out_vec)
 }
 
 #[test]
 fn decode_h265_720p_basic_grayscale() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_grayscale.hevc");
-    run_basic_decode("decode_h265_720p_basic_grayscale", data, 1280, 720, false)?;
+    run_basic_decode("decode_h265_720p_basic_grayscale", data, 1280, 720)?;
     Ok(())
 }
 
 #[test]
 fn decode_h265_720p_basic_color() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_color.hevc");
-    run_basic_decode("decode_h265_720p_basic_color", data, 1280, 720, false)?;
+    run_basic_decode("decode_h265_720p_basic_color", data, 1280, 720)?;
     Ok(())
 }
 
 #[test]
 fn decode_h265_3k_basic() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    let frame = run_basic_decode("decode_h265_3k_basic", data, 3088, 2076, false)?;
+    let frame = run_basic_decode("decode_h265_3k_basic", data, 3088, 2076)?;
     assert!(&frame[..10].iter().all(|&x| x == 173));
     Ok(())
 }
@@ -116,17 +113,16 @@ fn decode_h265_3k_basic() -> Result<()> {
 #[test]
 fn decode_h265_3k_device() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    let frame = run_basic_decode("decode_h265_3k_device", data, 3088, 2076, false)?;
+    let frame = run_basic_decode("decode_h265_3k_device", data, 3088, 2076)?;
     assert!(&frame[..10].iter().all(|&x| x == 173));
     Ok(())
 }
 
-fn run_torture_test(
+fn run_torture_test<FA: FrameAllocator>(
     test_name: &str,
     data: &[u8],
     expected_width: u32,
     expected_height: u32,
-    use_device_frame: bool,
     frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
     #[cfg(feature = "torture")]
@@ -136,9 +132,9 @@ fn run_torture_test(
 
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
-    let mut decoder = NvDecoder::builder(context, nv_video_codec::decoder::types::Codec::HEVC)
-        .use_device_frame(use_device_frame)
-        .build()?;
+
+    let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<FA>()?;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
@@ -151,24 +147,26 @@ fn run_torture_test(
 
         let packet_timestamp = -1;
         let mut decoding_output =
-            decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+            decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
         let mut i = 0;
         // TODO(mbernat): This loop is very random, try to understand it better.
         // It has something to do with the latency settings and the decoding output for the current
         // packet only being available in the later `decode()` calls.
-        while i < DECODE_TRIES && decoding_output.frames.is_empty() {
+        while i < DECODE_TRIES && decoding_output.frame_count == 0 {
             let packet_timestamp = i as i64;
+            // `decoding_output` borrows the decoder and has to be dropped before another decoding.
+            drop(decoding_output);
             decoding_output =
-                decoder.decode(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+                decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
             i += 1;
         }
 
-        let _ = decoding_output.frames[0];
+        let _ = decoding_output.frames.next().unwrap();
 
         total_time += start.elapsed();
         blocked_time += start.elapsed();
 
-        total_frames_decoded += decoding_output.frames.len();
+        total_frames_decoded += decoding_output.frame_count;
         if total_frames_decoded % 1000 == 0 {
             info_ctx!(
                 test_name,
@@ -180,7 +178,7 @@ fn run_torture_test(
         }
 
         if timestamp == 0 {
-            let frame_info = &decoding_output.frame_info;
+            let frame_info = &decoding_output.frame_info.unwrap();
 
             info_ctx!(
                 test_name,
@@ -191,7 +189,6 @@ fn run_torture_test(
             assert!(frame_info.width() == expected_width);
             assert!(frame_info.height() == expected_height);
             assert!(total_frames_decoded > 0);
-            assert!(!frame_info.video_info().is_empty());
         }
     }
 
@@ -210,23 +207,41 @@ fn run_torture_test(
 #[test]
 fn decode_h265_3k_basic_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_basic_torture", data, 3088, 2076, false, None)
+    run_torture_test::<HostFrameAllocator>("decode_h265_3k_basic_torture", data, 3088, 2076, None)
 }
 
 #[test]
 fn decode_h265_3k_device_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture", data, 3088, 2076, true, None)
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_torture",
+        data,
+        3088,
+        2076,
+        None,
+    )
 }
 
 #[test]
 fn decode_h265_3k_device_framelock_torture() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_framelock_torture", data, 3088, 2076, true, None)
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_framelock_torture",
+        data,
+        3088,
+        2076,
+        None,
+    )
 }
 
 #[test]
 fn decode_h265_3k_device_torture_60fps() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
-    run_torture_test("decode_h265_3k_device_torture_60fps", data, 3088, 2076, true, Some(60.0))
+    run_torture_test::<DeviceFrameAllocator>(
+        "decode_h265_3k_device_torture_60fps",
+        data,
+        3088,
+        2076,
+        Some(60.0),
+    )
 }
