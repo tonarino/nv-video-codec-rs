@@ -4,6 +4,7 @@ extern crate log;
 extern crate simple_logger;
 
 use anyhow::Result;
+use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::{
     encoder::{
         nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodePicFlags, EncodeRateControl,
@@ -11,13 +12,10 @@ use nv_video_codec::{
     },
     guids::{EncodeCodec, EncodePreset},
 };
-use rustacuda::{
-    device::Device,
-    prelude::{Context, ContextFlags},
-};
 use simple_logger::SimpleLogger;
 use std::{
     io::Write,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -25,11 +23,9 @@ use std::{
 #[macro_use]
 mod utils;
 
-fn init_cuda_ctx() -> Result<Context> {
-    rustacuda::init(rustacuda::CudaFlags::empty())?;
-    let device = Device::get_device(0)?;
-    let context =
-        Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
+fn init_cuda_ctx() -> Result<Arc<CudaContext>> {
+    let context = CudaContext::new(0)?;
+    context.set_flags(CUctx_flags::CU_CTX_MAP_HOST)?;
     Ok(context)
 }
 

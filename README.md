@@ -80,7 +80,7 @@ impl NvDecoder {
 ```
 
 1. `NvDecoder` can be obtained with `NvDecoder::builder().x().y().z().build()`, provided a
-   `rustacuda` `Context` has been created.
+   `cudarc` `CudaContext` has been created.
 1. The decoder is then fed with `NvDecoder::decode(data, ...)`, which makes it parse and process
    the `data`.
 1. If decoding is successful the results can be queried with methods like `NvDecoder::get_width()`,
