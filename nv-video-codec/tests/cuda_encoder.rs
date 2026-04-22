@@ -7,8 +7,9 @@ use anyhow::Result;
 use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::{
     encoder::{
-        nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodePicFlags, EncodeRateControl,
-        EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
+        nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodeMultiPass, EncodePicFlags,
+        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams,
+        NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -53,8 +54,10 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
         rate_control: EncodeRateControl {
             mode: EncodeRateControlMode::ConstantBitrate,
             low_delay_key_frame_scale: 1,
-            average_bit_rate: 13_000_000,
+            bit_rate: 13_000_000,
             enable_aq: true,
+            multi_pass: EncodeMultiPass::TwoPassFullResolution,
+            ..Default::default()
         },
     };
 

@@ -63,8 +63,9 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         rate_control: EncodeRateControl {
             mode: EncodeRateControlMode::ConstantBitrate,
             low_delay_key_frame_scale: 1,
-            average_bit_rate: 13_000_000,
+            bit_rate: 13_000_000,
             enable_aq: true,
+            ..Default::default()
         },
     };
 

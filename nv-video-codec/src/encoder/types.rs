@@ -2,7 +2,8 @@ use super::{NvEncError, NvEncoderError};
 use crate::guids::{EncodeCodec, EncodePreset};
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
-    self as ffi, NV_ENC_CONFIG, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
+    self as ffi, NV_ENC_CONFIG, NV_ENC_MULTI_PASS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS,
+    NV_ENC_TUNING_INFO,
 };
 
 ffi_enum! {
@@ -109,18 +110,40 @@ bitflags! {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EncodeRateControlMode {
-    ConstantQp,
     #[default]
+    ConstantQp,
     VariableBitrate,
     ConstantBitrate,
 }
 
 impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
     fn from(value: EncodeRateControlMode) -> Self {
+        use NV_ENC_PARAMS_RC_MODE as MODE;
+
         match value {
-            EncodeRateControlMode::ConstantQp => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CONSTQP,
-            EncodeRateControlMode::VariableBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_VBR,
-            EncodeRateControlMode::ConstantBitrate => NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR,
+            EncodeRateControlMode::ConstantQp => MODE::NV_ENC_PARAMS_RC_CONSTQP,
+            EncodeRateControlMode::VariableBitrate => MODE::NV_ENC_PARAMS_RC_VBR,
+            EncodeRateControlMode::ConstantBitrate => MODE::NV_ENC_PARAMS_RC_CBR,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeMultiPass {
+    #[default]
+    Disabled,
+    TwoPassQuarterResolution,
+    TwoPassFullResolution,
+}
+
+impl From<EncodeMultiPass> for NV_ENC_MULTI_PASS {
+    fn from(value: EncodeMultiPass) -> Self {
+        use NV_ENC_MULTI_PASS as PASS;
+
+        match value {
+            EncodeMultiPass::Disabled => PASS::NV_ENC_MULTI_PASS_DISABLED,
+            EncodeMultiPass::TwoPassQuarterResolution => PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION,
+            EncodeMultiPass::TwoPassFullResolution => PASS::NV_ENC_TWO_PASS_FULL_RESOLUTION,
         }
     }
 }
@@ -148,12 +171,15 @@ impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EncodeRateControl {
     pub mode: EncodeRateControlMode,
     pub low_delay_key_frame_scale: u8,
-    pub average_bit_rate: u32,
+    pub bit_rate: u32,
+    pub vbv_buffer_size_bits: u32,
+    pub vbv_buffer_initial_delay: u32,
     pub enable_aq: bool,
+    pub multi_pass: EncodeMultiPass,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -167,17 +193,15 @@ pub struct NvEncoderParams {
 }
 
 impl NvEncoderParams {
-    pub(crate) fn apply_to_encode_config(
-        &self,
-        frame_size: u32,
-        encode_config: &mut NV_ENC_CONFIG,
-    ) {
+    pub(crate) fn apply_to_encode_config(&self, encode_config: &mut NV_ENC_CONFIG) {
         encode_config.rcParams.rateControlMode = self.rate_control.mode.into();
         encode_config.rcParams.lowDelayKeyFrameScale = self.rate_control.low_delay_key_frame_scale;
-        encode_config.rcParams.averageBitRate = self.rate_control.average_bit_rate;
-        encode_config.rcParams.vbvBufferSize = frame_size;
-        encode_config.rcParams.vbvInitialDelay = frame_size;
+        encode_config.rcParams.averageBitRate = self.rate_control.bit_rate;
+        encode_config.rcParams.averageBitRate = self.rate_control.bit_rate;
+        encode_config.rcParams.vbvBufferSize = self.rate_control.vbv_buffer_size_bits;
+        encode_config.rcParams.vbvInitialDelay = self.rate_control.vbv_buffer_initial_delay;
         encode_config.rcParams.set_enableAQ(self.rate_control.enable_aq as u32);
+        encode_config.rcParams.multiPass = self.rate_control.multi_pass.into();
 
         match self.codec {
             EncodeCodec::H264 =>
