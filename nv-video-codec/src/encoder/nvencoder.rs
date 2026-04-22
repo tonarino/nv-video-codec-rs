@@ -197,8 +197,8 @@ where
     }
 
     fn reconfigure(&mut self, mut params: NV_ENC_RECONFIGURE_PARAMS) -> NvEncoderResult<()> {
-        self.initialize_params.encodeConfig = &raw mut self.encode_config;
         params.reInitEncodeParams = self.initialize_params;
+        params.reInitEncodeParams.encodeConfig = &raw mut self.encode_config;
 
         unsafe {
             self.nv_encode_api_function_list.nvEncReconfigureEncoder.unwrap()(
@@ -207,8 +207,6 @@ where
             )
             .into_nvenc_result()?;
         }
-
-        self.initialize_params.encodeConfig = null_mut();
 
         self.width = params.reInitEncodeParams.encodeWidth;
         self.height = params.reInitEncodeParams.encodeHeight;
