@@ -201,6 +201,7 @@ impl NvEncoderParams {
         encode_config.rcParams.vbvBufferSize = self.rate_control.vbv_buffer_size_bits;
         encode_config.rcParams.vbvInitialDelay = self.rate_control.vbv_buffer_initial_delay;
         encode_config.rcParams.set_enableAQ(self.rate_control.enable_aq as u32);
+        encode_config.rcParams.multiPass = self.rate_control.multi_pass.into();
 
         match self.codec {
             EncodeCodec::H264 =>
