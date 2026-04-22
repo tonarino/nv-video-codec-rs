@@ -48,7 +48,7 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
         tuning_info: EncodeTuningInfo::UltraLowLatency,
-        frame_rate: 60,
+        frame_rate: 60.0,
         // required for use with ffmpeg, not with nvcodec
         repeat_spspps: true,
         rate_control: EncodeRateControl {
@@ -86,6 +86,8 @@ fn encode_single_frame_grayscale() -> Result<()> {
     let (width, height) = (1280, 720);
     let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
     util_create_encoder(&mut encoder)?;
+
+    encoder.set_bitrate_and_frame_rate(10_000_000, 30.0)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
