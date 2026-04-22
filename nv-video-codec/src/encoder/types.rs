@@ -2,7 +2,8 @@ use super::{NvEncError, NvEncoderError};
 use crate::guids::{EncodeCodec, EncodePreset};
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
-    self as ffi, NV_ENC_CONFIG, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS, NV_ENC_TUNING_INFO,
+    self as ffi, NV_ENC_CONFIG, NV_ENC_MULTI_PASS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS,
+    NV_ENC_TUNING_INFO,
 };
 
 ffi_enum! {
@@ -113,9 +114,6 @@ pub enum EncodeRateControlMode {
     ConstantQp,
     VariableBitrate,
     ConstantBitrate,
-    ConstantBitrateLowDelayHighQuality,
-    ConstantBitrateHighQuality,
-    VariableBitrateHighQuality,
 }
 
 impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
@@ -126,11 +124,26 @@ impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
             EncodeRateControlMode::ConstantQp => MODE::NV_ENC_PARAMS_RC_CONSTQP,
             EncodeRateControlMode::VariableBitrate => MODE::NV_ENC_PARAMS_RC_VBR,
             EncodeRateControlMode::ConstantBitrate => MODE::NV_ENC_PARAMS_RC_CBR,
-            EncodeRateControlMode::ConstantBitrateLowDelayHighQuality => {
-                MODE::NV_ENC_PARAMS_RC_CBR_LOWDELAY_HQ
-            },
-            EncodeRateControlMode::ConstantBitrateHighQuality => MODE::NV_ENC_PARAMS_RC_CBR_HQ,
-            EncodeRateControlMode::VariableBitrateHighQuality => MODE::NV_ENC_PARAMS_RC_VBR_HQ,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeMultiPass {
+    #[default]
+    Disabled,
+    TwoPassQuarterResolution,
+    TwoPassFullResolution,
+}
+
+impl From<EncodeMultiPass> for NV_ENC_MULTI_PASS {
+    fn from(value: EncodeMultiPass) -> Self {
+        use NV_ENC_MULTI_PASS as PASS;
+
+        match value {
+            EncodeMultiPass::Disabled => PASS::NV_ENC_MULTI_PASS_DISABLED,
+            EncodeMultiPass::TwoPassQuarterResolution => PASS::NV_ENC_TWO_PASS_QUARTER_RESOLUTION,
+            EncodeMultiPass::TwoPassFullResolution => PASS::NV_ENC_TWO_PASS_FULL_RESOLUTION,
         }
     }
 }
@@ -166,6 +179,7 @@ pub struct EncodeRateControl {
     pub vbv_buffer_size_bits: u32,
     pub vbv_buffer_initial_delay: u32,
     pub enable_aq: bool,
+    pub multi_pass: EncodeMultiPass,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
