@@ -444,9 +444,6 @@ where
             },
         }
 
-        // TODO: is this needed?
-        // initialize_params.frameRateNum = params.frame_rate;
-
         params.apply_to_encode_config(&mut encode_config);
         Self::validate_encode_config(encode_config, params.codec, self.buffer_format)?;
 

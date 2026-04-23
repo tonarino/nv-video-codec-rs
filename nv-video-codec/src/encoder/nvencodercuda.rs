@@ -7,11 +7,15 @@ use crate::{
     encoder::nvencoder::{Device, Input, NvEncInputFrame, NvEncoderSettings},
 };
 use cuda_gl_interop::{CudaSliceMut, Size};
-use cudarc::driver::CudaContext;
-use nv_video_codec_sys::{cuMemAllocPitch_v2, cuMemFree_v2, CUdeviceptr, _NV_ENC_DEVICE_TYPE};
+use cudarc::driver::{
+    sys::{cuMemcpy2D_v2, CUdeviceptr, CUmemorytype_enum, CUDA_MEMCPY2D},
+    CudaContext,
+};
+use nv_video_codec_sys::{cuMemAllocPitch_v2, cuMemFree_v2, _NV_ENC_DEVICE_TYPE};
 use std::{
     ffi::c_void,
     ops::{Deref, DerefMut},
+    ptr::null_mut,
     sync::Arc,
 };
 
@@ -175,5 +179,43 @@ impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
 
     fn release_input_buffers(encoder: &mut NvEncoder<Self>) -> NvEncoderResult<()> {
         encoder.release_cuda_resources()
+    }
+}
+
+pub fn upload_nv12_data_to_cuda_resource(
+    data: &[u8],
+    resource: CudaSliceMut<'_>,
+    width: u32,
+    height: u32,
+) {
+    // NV12 data layout:
+    // - 8-bit width x height luma plane
+    // - 2 8-bit width/2 x height/2 chroma planes (each chroma value is shared by a 2x2 pixel block)
+    //   - when the chroma planes are interleaved, this results in 1 8-bit width x height/2 plane
+    let width = width as usize;
+    let luma_height = height as usize;
+    let chroma_height = height as usize / 2;
+
+    let m = CUDA_MEMCPY2D {
+        srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_HOST,
+        srcHost: &raw const *data as *const c_void,
+        srcPitch: width,
+        dstMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
+        dstDevice: resource.buffer() as CUdeviceptr,
+        dstPitch: resource.pitch(),
+        WidthInBytes: width,
+        Height: luma_height + chroma_height,
+        srcXInBytes: 0,
+        srcY: 0,
+        srcDevice: 0,
+        srcArray: null_mut(),
+        dstXInBytes: 0,
+        dstY: 0,
+        dstHost: null_mut(),
+        dstArray: null_mut(),
+    };
+
+    unsafe {
+        cuMemcpy2D_v2(&raw const m);
     }
 }
