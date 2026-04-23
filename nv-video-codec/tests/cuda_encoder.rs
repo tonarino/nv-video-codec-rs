@@ -7,9 +7,10 @@ use anyhow::Result;
 use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::{
     encoder::{
-        nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodeMultiPass, EncodePicFlags,
-        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams,
-        NvEncoderSettings,
+        nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
+        types::BufferFormat,
+        EncodeMultiPass, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
+        EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -53,7 +54,7 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
         rate_control: EncodeRateControl {
             mode: EncodeRateControlMode::ConstantBitrate,
             low_delay_key_frame_scale: 1,
-            bit_rate: 13_000_000,
+            bit_rate: 16_000_000,
             enable_aq: true,
             multi_pass: EncodeMultiPass::TwoPassFullResolution,
             ..Default::default()
@@ -119,7 +120,7 @@ fn encode_multi_frame_3k() -> Result<()> {
     #[cfg(feature = "torture")]
     const NUM_TORTURE_FRAMES: usize = 500;
     #[cfg(not(feature = "torture"))]
-    const NUM_TORTURE_FRAMES: usize = 5;
+    const NUM_TORTURE_FRAMES: usize = 20;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
@@ -127,11 +128,15 @@ fn encode_multi_frame_3k() -> Result<()> {
 
     let mut force_i_frame = true;
 
-    for _ in 0..NUM_TORTURE_FRAMES {
+    for i in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
 
-        let _resource = encoder.get_next_input_resource();
-        // TODO: Copy data to resource
+        if i.is_multiple_of(5) {
+            encoder.set_bitrate_and_frame_rate(i as u32 * 1_000_000, 60.0)?;
+        }
+
+        let resource = encoder.get_next_input_resource();
+        upload_nv12_data_to_cuda_resource(data, resource, width, height);
 
         let pic_flags = if force_i_frame {
             // force intra-frame and per-frame metadata
@@ -144,6 +149,10 @@ fn encode_multi_frame_3k() -> Result<()> {
 
         if !packet.is_empty() {
             force_i_frame = false;
+        }
+
+        if !packet.is_empty() {
+            log::info!("packet.len() = {}, packet[0].len() = {}", packet.len(), packet[0].len());
         }
 
         frames_encoded += 1;
