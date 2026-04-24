@@ -92,6 +92,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
 
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
+    assert_eq!(packet.len(), 1);
 
     let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
     for frame in &packet {
@@ -134,6 +135,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         // force intra-frame and force per-frame metadata
         let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
         encoder.encode_frame(&mut packet, pic_flags)?;
+        assert_eq!(packet.len(), 1);
 
         frames_encoded += 1;
         total_time += start_time.elapsed();
