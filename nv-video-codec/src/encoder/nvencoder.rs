@@ -1144,10 +1144,9 @@ impl NvEncoderSettings {
     builder_field_setter!(output_in_video_memory: bool);
 
     pub fn new(width: u32, height: u32, buffer_format: BufferFormat) -> Self {
-        // Note: this was originally set to 3 in NvEncoderGL.h by default
-        // Absolutely necessary for performance
-        // Three shall be the number thou shalt count, and the number of counting shall be three.
-        let extra_output_delay = 3;
+        // TODO(mbernat): The default used in samples is 3 but we use 0 in portal nvpipe.
+        // Check if this has any downsides.
+        let extra_output_delay = 0;
 
         Self {
             width,
