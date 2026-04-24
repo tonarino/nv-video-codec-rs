@@ -101,6 +101,7 @@ pub struct NvEncoderCudaResourceManager {}
 
 impl NvEncoderResourceManager for NvEncoderCudaResourceManager {
     type InputResource = CUdeviceptr;
+    // TODO(mbernat): Use a different type here, this one is only valid for `BufferFormat::ABGR`.
     type InputResourceRef<'a> = CudaSliceMut<'a>;
     type ResourceContext = Arc<CudaContext>;
 
