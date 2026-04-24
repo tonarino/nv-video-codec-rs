@@ -7,9 +7,10 @@ use anyhow::Result;
 use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::{
     encoder::{
-        nvencodercuda::NvEncoderCuda, types::BufferFormat, EncodeMultiPass, EncodePicFlags,
-        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams,
-        NvEncoderSettings,
+        nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
+        types::BufferFormat,
+        EncodeMultiPass, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
+        EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -48,13 +49,13 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
         tuning_info: EncodeTuningInfo::UltraLowLatency,
-        frame_rate: 60,
+        frame_rate: 60.0,
         // required for use with ffmpeg, not with nvcodec
         repeat_spspps: true,
         rate_control: EncodeRateControl {
             mode: EncodeRateControlMode::ConstantBitrate,
             low_delay_key_frame_scale: 1,
-            bit_rate: 13_000_000,
+            bit_rate: 16_000_000,
             enable_aq: true,
             multi_pass: EncodeMultiPass::TwoPassFullResolution,
             ..Default::default()
@@ -86,6 +87,8 @@ fn encode_single_frame_grayscale() -> Result<()> {
     let (width, height) = (1280, 720);
     let mut encoder = util_init_encoder(width, height, BufferFormat::NV12)?;
     util_create_encoder(&mut encoder)?;
+
+    encoder.set_bitrate_and_frame_rate(10_000_000, 30.0)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
@@ -123,20 +126,28 @@ fn encode_multi_frame_3k() -> Result<()> {
     #[cfg(feature = "torture")]
     const NUM_TORTURE_FRAMES: usize = 500;
     #[cfg(not(feature = "torture"))]
-    const NUM_TORTURE_FRAMES: usize = 5;
+    const NUM_TORTURE_FRAMES: usize = 20;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
-    for _ in 0..NUM_TORTURE_FRAMES {
+    for i in 1..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
 
-        let _resource = encoder.get_next_input_resource();
-        // TODO: Copy data to resource
+        if i.is_multiple_of(5) {
+            encoder.set_bitrate_and_frame_rate(i as u32 * 1_000_000, 60.0)?;
+        }
+
+        let resource = encoder.get_next_input_resource();
+        upload_nv12_data_to_cuda_resource(data, resource, width, height);
 
         // force intra-frame and force per-frame metadata
         let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
         encoder.encode_frame(&mut packet, pic_flags)?;
+
+        if !packet.is_empty() {
+            log::info!("packet.len() = {}, packet[0].len() = {}", packet.len(), packet[0].len());
+        }
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

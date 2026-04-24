@@ -57,7 +57,7 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
         // ULTRA_LOW might be like 0.5ms faster at times?
         // needs testing on dev installation
         tuning_info: EncodeTuningInfo::UltraLowLatency,
-        frame_rate: 60,
+        frame_rate: 60.0,
         // required for use with ffmpeg, not with nvcodec
         repeat_spspps: true,
         rate_control: EncodeRateControl {
