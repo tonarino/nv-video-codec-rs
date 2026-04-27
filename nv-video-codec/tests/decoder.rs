@@ -8,7 +8,7 @@ use nv_video_codec::decoder::{
     frame::{
         device::DeviceFrameAllocator, host::HostFrameAllocator, DecodingOutput, FrameAllocator,
     },
-    DecoderPacketFlags, NvDecoderBuilder,
+    DecoderPacketFlags, NvDecoder, NvDecoderBuilder,
 };
 use simple_logger::SimpleLogger;
 use std::{sync::Arc, time::Duration};
@@ -47,6 +47,19 @@ fn run_basic_decode(
     let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
         .build::<HostFrameAllocator>()?;
 
+    let (frame_buffer, _intra_pic_flag) =
+        run_basic_decode2(&mut decoder, test_name, data, expected_width, expected_height)?;
+
+    Ok(frame_buffer)
+}
+
+fn run_basic_decode2(
+    decoder: &mut Box<NvDecoder<HostFrameAllocator>>,
+    test_name: &str,
+    data: &[u8],
+    expected_width: u32,
+    expected_height: u32,
+) -> Result<(Vec<u8>, bool)> {
     let start = std::time::Instant::now();
     let mut decoding_output = DecodingOutput::<Option<_>>::default();
     let mut i = 0;
@@ -61,7 +74,10 @@ fn run_basic_decode(
         i += 1;
     }
 
-    let frame_info = &decoding_output.frame_info.unwrap();
+    let Some(frame_info) = &decoding_output.frame_info else {
+        return Ok((vec![], false));
+    };
+
     info_ctx!(
         test_name,
         "Decoder output dimensions: {}x{}",
@@ -80,7 +96,7 @@ fn run_basic_decode(
 
     let mut out_vec = Vec::new();
     out_vec.extend_from_slice(&frame.slice);
-    Ok(out_vec)
+    Ok((out_vec, frame_info.intra_pic_flag()))
 }
 
 #[test]
@@ -101,7 +117,7 @@ fn decode_h265_720p_basic_color() -> Result<()> {
 fn decode_h265_3k_basic() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     let frame = run_basic_decode("decode_h265_3k_basic", data, 3088, 2076)?;
-    assert!(&frame[..10].iter().all(|&x| x == 173));
+    assert_eq!(frame[..10], [173; 10]);
     Ok(())
 }
 
@@ -109,7 +125,35 @@ fn decode_h265_3k_basic() -> Result<()> {
 fn decode_h265_3k_device() -> Result<()> {
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
     let frame = run_basic_decode("decode_h265_3k_device", data, 3088, 2076)?;
-    assert!(&frame[..10].iter().all(|&x| x == 173));
+    assert_eq!(frame[..10], [173; 10]);
+    Ok(())
+}
+
+#[test]
+fn decode_h265_3k_p_frame_device() -> Result<()> {
+    let _ = SimpleLogger::new().init();
+    let context = init_cuda_ctx()?;
+    let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .build::<HostFrameAllocator>()?;
+
+    let data = include_bytes!("../resources/test/single_p_frame_3k.hevc");
+    let (frame, intra_pic_flag) =
+        run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 2", data, 3088, 2076)?;
+    assert_eq!(frame, vec![]);
+    assert!(!intra_pic_flag);
+
+    let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");
+    let (frame, intra_pic_flag) =
+        run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 1", data, 3088, 2076)?;
+    assert_eq!(frame[..10], [173; 10]);
+    assert!(intra_pic_flag);
+
+    let data = include_bytes!("../resources/test/single_p_frame_3k.hevc");
+    let (frame, intra_pic_flag) =
+        run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 2", data, 3088, 2076)?;
+    assert_eq!(frame[..10], [42, 26, 42, 26, 42, 26, 42, 26, 42, 26]);
+    assert!(!intra_pic_flag);
+
     Ok(())
 }
 

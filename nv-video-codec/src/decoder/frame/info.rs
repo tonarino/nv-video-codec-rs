@@ -11,6 +11,8 @@ pub struct FrameInfo {
     luma_height: u32,
     chroma_height: u32,
     num_chroma_planes: u32,
+
+    intra_pic_flag: bool,
 }
 
 impl FrameInfo {
@@ -22,8 +24,17 @@ impl FrameInfo {
         let chroma_height =
             f64::ceil(luma_height as f64 * output_format.chroma_height_factor()) as u32;
         let num_chroma_planes = output_format.chroma_plane_count() as u32;
+        let intra_pic_flag = false;
 
-        Self { output_format, bpp, width, luma_height, chroma_height, num_chroma_planes }
+        Self {
+            output_format,
+            bpp,
+            width,
+            luma_height,
+            chroma_height,
+            num_chroma_planes,
+            intra_pic_flag,
+        }
     }
 
     /// Bytes per pixel.
@@ -68,5 +79,13 @@ impl FrameInfo {
 
     pub fn frame_size(&self) -> u32 {
         self.width_in_bytes() as u32 * self.height_in_rows()
+    }
+
+    pub fn intra_pic_flag(&self) -> bool {
+        self.intra_pic_flag
+    }
+
+    pub fn intra_pic_flag_mut(&mut self) -> &mut bool {
+        &mut self.intra_pic_flag
     }
 }
