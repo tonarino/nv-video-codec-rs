@@ -317,11 +317,19 @@ impl<A: FrameAllocator> NvDecoder<A> {
         // NOTE: this function takes basically no time (~100us), no real point of optimizing this
         debug_assert!(!self.decoder.is_null());
         debug_assert!(!pic_params.is_null());
-        unsafe {
-            self.picture_decode_index_mapping[(*pic_params).CurrPicIdx as usize] =
+
+        {
+            let pic_params =
+                // SAFETY: `pic_params` points to valid data and there is no aliasing.
+                unsafe { pic_params.as_ref().expect("pic_params to be set when decoding") };
+
+            self.picture_decode_index_mapping[pic_params.CurrPicIdx as usize] =
                 self.decoded_pictures;
+            self.decoded_pictures += 1;
+
+            let frame_info = self.frame_info.as_mut().expect("frame_info to be set when decoding");
+            *(frame_info.intra_pic_flag_mut()) = pic_params.intra_pic_flag == 1;
         }
-        self.decoded_pictures += 1;
 
         do_within_context(&self.context, || unsafe {
             cuvidDecodePicture(self.decoder, pic_params)
