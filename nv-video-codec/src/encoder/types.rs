@@ -197,7 +197,7 @@ impl NvEncoderParams {
         encode_config.rcParams.rateControlMode = self.rate_control.mode.into();
         encode_config.rcParams.lowDelayKeyFrameScale = self.rate_control.low_delay_key_frame_scale;
         encode_config.rcParams.averageBitRate = self.rate_control.bit_rate;
-        encode_config.rcParams.averageBitRate = self.rate_control.bit_rate;
+        encode_config.rcParams.maxBitRate = self.rate_control.bit_rate;
         encode_config.rcParams.vbvBufferSize = self.rate_control.vbv_buffer_size_bits;
         encode_config.rcParams.vbvInitialDelay = self.rate_control.vbv_buffer_initial_delay;
         encode_config.rcParams.set_enableAQ(self.rate_control.enable_aq as u32);
