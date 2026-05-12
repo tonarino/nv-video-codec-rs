@@ -195,7 +195,7 @@ pub fn upload_nv12_data_to_cuda_resource(
     //   - when the chroma planes are interleaved, this results in 1 8-bit width x height/2 plane
     let width = width as usize;
     let luma_height = height as usize;
-    let chroma_height = height as usize / 2;
+    let chroma_height = (height as usize + 1) / 2;
 
     let m = CUDA_MEMCPY2D {
         srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_HOST,
