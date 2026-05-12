@@ -171,7 +171,7 @@ pub fn upload_nv12_data_to_texture_resource(
     //   - when the chroma planes are interleaved, this results in 1 8-bit width x height/2 plane
     let width = width as i32;
     let luma_height = height as i32;
-    let chroma_height = (height as i32 + 1) / 2;
+    let chroma_height = height.div_ceil(2) as i32;
 
     unsafe {
         gl::BindTexture(resource.target, resource.texture);
