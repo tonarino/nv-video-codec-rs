@@ -118,9 +118,11 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut packet = Vec::new();
 
     #[cfg(feature = "torture")]
-    const NUM_TORTURE_FRAMES: usize = 500;
+    const NUM_FRAMES_TO_ENCODE: usize = 500;
     #[cfg(not(feature = "torture"))]
-    const NUM_TORTURE_FRAMES: usize = 20;
+    const NUM_FRAMES_TO_ENCODE: usize = 20;
+
+    const MAX_BITRATE: u32 = 50_000_000;
 
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
@@ -128,11 +130,13 @@ fn encode_multi_frame_3k() -> Result<()> {
 
     let mut force_i_frame = true;
 
-    for i in 0..NUM_TORTURE_FRAMES {
+    for i in 0..NUM_FRAMES_TO_ENCODE {
         let start_time = Instant::now();
 
         if i.is_multiple_of(5) {
-            encoder.set_bitrate_and_frame_rate(i as u32 * 1_000_000, 60.0)?;
+            // Test encoding with progressively increasing bitrate.
+            let bitrate = MAX_BITRATE / NUM_FRAMES_TO_ENCODE as u32 * (i as u32 + 1);
+            encoder.set_bitrate_and_frame_rate(bitrate, 60.0)?;
         }
 
         let resource = encoder.get_next_input_resource();
@@ -171,9 +175,9 @@ fn encode_multi_frame_3k() -> Result<()> {
     info_ctx!(
         "encode_multi",
         "Encoded {} frames in {:?}, {:?} per frame",
-        NUM_TORTURE_FRAMES,
+        NUM_FRAMES_TO_ENCODE,
         total_time,
-        total_time / NUM_TORTURE_FRAMES as u32
+        total_time / NUM_FRAMES_TO_ENCODE as u32
     );
 
     encoder.end_encode(&mut packet)?;

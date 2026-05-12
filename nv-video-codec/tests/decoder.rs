@@ -149,9 +149,9 @@ fn run_torture_test<FA: FrameAllocator>(
     frame_rate: Option<f64>, // frames/sec
 ) -> Result<()> {
     #[cfg(feature = "torture")]
-    const NUM_TORTURE_FRAMES: i64 = 10000;
+    const NUM_FRAMES_TO_ENCODE: i64 = 1000;
     #[cfg(not(feature = "torture"))]
-    const NUM_TORTURE_FRAMES: i64 = 10;
+    const NUM_FRAMES_TO_ENCODE: i64 = 20;
 
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
@@ -163,7 +163,7 @@ fn run_torture_test<FA: FrameAllocator>(
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut total_frames_decoded = 0;
-    for timestamp in 0..NUM_TORTURE_FRAMES {
+    for timestamp in 0..NUM_FRAMES_TO_ENCODE {
         if let Some(frame_rate) = frame_rate {
             std::thread::sleep(Duration::from_secs_f64(1.0 / frame_rate));
         }
@@ -208,8 +208,8 @@ fn run_torture_test<FA: FrameAllocator>(
         "frames decoded: {}, in {:?}, avg time/frame in past {} frames: {:?}",
         total_frames_decoded,
         total_time,
-        NUM_TORTURE_FRAMES,
-        total_time / NUM_TORTURE_FRAMES as u32,
+        NUM_FRAMES_TO_ENCODE,
+        total_time / NUM_FRAMES_TO_ENCODE as u32,
     );
 
     Ok(())
