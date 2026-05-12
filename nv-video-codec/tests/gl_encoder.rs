@@ -14,10 +14,7 @@ use nv_video_codec::{
     guids::{EncodeCodec, EncodePreset},
 };
 use simple_logger::SimpleLogger;
-use std::{
-    io::Write,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 #[path = "utils.rs"]
 #[macro_use]
@@ -104,14 +101,6 @@ fn encode_single_frame_grayscale() -> Result<()> {
     let mut packet = Vec::new();
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
 
-    // TODO(mbernat): This produces an empty file, unlike `encode_multi_frame_3k()`, which works.
-    // The difference is that the latter method encodes the data 5 times in a loop. Another weird
-    // latency issue?
-    let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
-
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
 
@@ -129,7 +118,6 @@ fn encode_multi_frame_3k() -> Result<()> {
     let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
-    let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
     #[cfg(feature = "torture")]
@@ -168,10 +156,6 @@ fn encode_multi_frame_3k() -> Result<()> {
         total_time,
         total_time / NUM_TORTURE_FRAMES as u32
     );
-
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());

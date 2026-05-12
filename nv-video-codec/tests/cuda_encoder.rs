@@ -14,7 +14,6 @@ use nv_video_codec::{
 };
 use simple_logger::SimpleLogger;
 use std::{
-    io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -94,11 +93,6 @@ fn encode_single_frame_grayscale() -> Result<()> {
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
     assert_eq!(packet.len(), 1);
 
-    let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
-
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
 
@@ -115,7 +109,6 @@ fn encode_multi_frame_3k() -> Result<()> {
     let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
-    let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
     #[cfg(feature = "torture")]
@@ -145,13 +138,6 @@ fn encode_multi_frame_3k() -> Result<()> {
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {
-            if !force_i_frame {
-                for frame in &packet {
-                    let mut f = std::fs::File::create("encode_out_3k_pframe.hevc")?;
-                    f.write_all(frame)?;
-                }
-            }
-
             force_i_frame = false;
         }
 
@@ -175,10 +161,6 @@ fn encode_multi_frame_3k() -> Result<()> {
         total_time,
         total_time / NUM_TORTURE_FRAMES as u32
     );
-
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());

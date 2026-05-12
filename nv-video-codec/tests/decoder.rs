@@ -91,9 +91,6 @@ fn run_basic_decode2(
     info_ctx!(test_name, "Got frame of size: {}", frame.slice.len());
     assert!(!frame.slice.is_empty());
 
-    // NOTE: frames can be checked with https://rawpixels.net/
-    // std::fs::write("decode_out_grayscale.nv12", &frame.data)?;
-
     let mut out_vec = Vec::new();
     out_vec.extend_from_slice(&frame.slice);
     Ok((out_vec, frame_info.intra_pic_flag()))
