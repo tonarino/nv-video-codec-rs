@@ -85,7 +85,7 @@ impl FrameInfo {
         self.intra_pic_flag
     }
 
-    pub fn intra_pic_flag_mut(&mut self) -> &mut bool {
-        &mut self.intra_pic_flag
+    pub fn set_intra_pic_flag_mut(&mut self, intra_pic_flag: bool) {
+        self.intra_pic_flag = intra_pic_flag;
     }
 }

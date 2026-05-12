@@ -328,7 +328,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
             self.decoded_pictures += 1;
 
             let frame_info = self.frame_info.as_mut().expect("frame_info to be set when decoding");
-            *(frame_info.intra_pic_flag_mut()) = pic_params.intra_pic_flag == 1;
+            frame_info.set_intra_pic_flag_mut(pic_params.intra_pic_flag == 1);
         }
 
         do_within_context(&self.context, || unsafe {
