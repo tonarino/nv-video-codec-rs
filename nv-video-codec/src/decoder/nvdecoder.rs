@@ -400,27 +400,22 @@ impl<A: FrameAllocator> NvDecoder<A> {
         let frame_info =
             self.frame_info.as_ref().expect("Frame info to be set by `handle_video_sequence()`");
 
-        // NOTE: this block takes negligible time
-        let decoded_frame_ptr: *mut u8;
-        let mut pitch = 0;
-        {
-            let frames = &mut self.frames;
-            self.decoded_frames += 1;
-            if self.decoded_frames > frames.len() {
-                // Not enough frames in stock
-                self.allocated_frames += 1;
-                let data =
-                    A::alloc(frame_info.width_in_bytes(), frame_info.height_in_rows() as usize);
-                pitch = data.pitch();
-                frames.push_back(OwnedFrame { timestamp: disp_info.timestamp, buffer: data });
-            }
-            let frame_len = frames.len();
+        let working_frame_index = self.decoded_frames;
+        self.decoded_frames += 1;
 
-            // SAFETY: This buffer has just been allocated and the pointer is only used to copy the
-            // luma and chroma data to it below. In particular, it's not used to deallocate or
-            // otherwise invalidate the buffer.
-            decoded_frame_ptr = unsafe { frames[frame_len - 1].buffer.as_mut_ptr() };
+        // NOTE: this block takes negligible time
+        if self.decoded_frames > self.frames.len() {
+            // Not enough frames in stock
+            self.allocated_frames += 1;
+            let data = A::alloc(frame_info.width_in_bytes(), frame_info.height_in_rows() as usize);
+            self.frames.push_back(OwnedFrame { timestamp: disp_info.timestamp, buffer: data });
         }
+
+        let working_frame = &mut self.frames[working_frame_index];
+
+        // SAFETY: The buffer pointer is only used to copy the luma and chroma data to it below.
+        // In particular, it's not used to deallocate or otherwise invalidate the buffer.
+        let working_frame_ptr = unsafe { working_frame.buffer.as_mut_ptr() };
 
         // NOTE: memcpys take about 1ms total here
         // Copy luma plane
@@ -429,9 +424,9 @@ impl<A: FrameAllocator> NvDecoder<A> {
             srcDevice: src_frame,
             srcPitch: src_pitch as usize,
             dstMemoryType: A::memory_type(),
-            dstHost: decoded_frame_ptr as *mut c_void,
-            dstDevice: decoded_frame_ptr as CUdeviceptr,
-            dstPitch: pitch,
+            dstHost: working_frame_ptr as *mut c_void,
+            dstDevice: working_frame_ptr as CUdeviceptr,
+            dstPitch: working_frame.buffer.pitch(),
             WidthInBytes: frame_info.width_in_bytes(),
             Height: frame_info.luma_height() as usize,
             ..Default::default()
@@ -444,7 +439,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         // NVDEC output has luma height aligned by 2. Adjust chroma offset by aligning height
         m.srcDevice =
             (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1))) as CUdeviceptr;
-        m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
+        m.dstHost = ((working_frame_ptr) as CUdeviceptr
             + (m.dstPitch as u64 * frame_info.luma_height() as u64))
             as *mut c_void;
         m.dstDevice = m.dstHost as CUdeviceptr;
@@ -456,7 +451,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         if frame_info.num_chroma_planes() == 2 {
             m.srcDevice = (src_frame + (src_pitch as u64 * ((self.surface_height + 1) & !1) * 2))
                 as CUdeviceptr;
-            m.dstHost = ((decoded_frame_ptr) as CUdeviceptr
+            m.dstHost = ((working_frame_ptr) as CUdeviceptr
                 + (m.dstPitch as u64 * frame_info.luma_height() as u64 * 2))
                 as *mut c_void;
             m.dstDevice = m.dstHost as CUdeviceptr;
