@@ -199,7 +199,7 @@ pub fn upload_nv12_data_to_cuda_resource(
 
     let m = CUDA_MEMCPY2D {
         srcMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_HOST,
-        srcHost: &raw const *data as *const c_void,
+        srcHost: data.as_ptr() as *const c_void,
         srcPitch: width,
         dstMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
         dstDevice: resource.buffer() as CUdeviceptr,
