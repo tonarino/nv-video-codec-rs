@@ -5,9 +5,7 @@ extern crate simple_logger;
 use anyhow::Result;
 use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::decoder::{
-    frame::{
-        device::DeviceFrameAllocator, host::HostFrameAllocator, DecodingOutput, FrameAllocator,
-    },
+    frame::{device::DeviceFrameAllocator, host::HostFrameAllocator, FrameAllocator},
     DecoderPacketFlags, NvDecoder, NvDecoderBuilder,
 };
 use simple_logger::SimpleLogger;
@@ -16,10 +14,6 @@ use std::{sync::Arc, time::Duration};
 #[path = "utils.rs"]
 #[macro_use]
 mod utils;
-
-// TODO(efyang) make this behaviour configurable and part of the library
-// From NVPipe: Some cuvid implementations have one frame latency. Refeed frame into pipeline in this case.
-const DECODE_TRIES: usize = 3;
 
 fn init_cuda_ctx() -> Result<Arc<CudaContext>> {
     let context = CudaContext::new(0)?;
@@ -45,6 +39,7 @@ fn run_basic_decode(
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
     let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .low_latency(true)
         .build::<HostFrameAllocator>()?;
 
     let (frame_buffer, _intra_pic_flag) =
@@ -61,18 +56,9 @@ fn run_basic_decode2(
     expected_height: u32,
 ) -> Result<(Vec<u8>, bool)> {
     let start = std::time::Instant::now();
-    let mut decoding_output = DecodingOutput::<Option<_>>::default();
-    let mut i = 0;
-    // TODO(mbernat): This loop is very random, try to understand it better.
-    // It has something to do with the latency settings and the decoding output for the current
-    // packet only being available in the later `decode()` calls.
-    while i < DECODE_TRIES && decoding_output.frames.is_none() {
-        let packet_timestamp = i as i64;
-        decoding_output =
-            decoder.decode_one(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
-
-        i += 1;
-    }
+    let packet_timestamp = 0;
+    let decoding_output =
+        decoder.decode_one(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
 
     let Some(frame_info) = &decoding_output.frame_info else {
         return Ok((vec![], false));
@@ -131,11 +117,12 @@ fn decode_h265_3k_p_frame_device() -> Result<()> {
     let _ = SimpleLogger::new().init();
     let context = init_cuda_ctx()?;
     let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .low_latency(true)
         .build::<HostFrameAllocator>()?;
 
     let data = include_bytes!("../resources/test/single_p_frame_3k.hevc");
     let (frame, intra_pic_flag) =
-        run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 2", data, 3088, 2076)?;
+        run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 0", data, 3088, 2076)?;
     assert_eq!(frame, vec![]);
     assert!(!intra_pic_flag);
 
@@ -170,6 +157,7 @@ fn run_torture_test<FA: FrameAllocator>(
     let context = init_cuda_ctx()?;
 
     let mut decoder = NvDecoderBuilder::new(context, nv_video_codec::decoder::types::Codec::HEVC)
+        .low_latency(true)
         .build::<FA>()?;
 
     let mut total_time = Duration::from_millis(0);
@@ -181,22 +169,9 @@ fn run_torture_test<FA: FrameAllocator>(
         }
         let start = std::time::Instant::now();
 
-        let packet_timestamp = -1;
+        let packet_timestamp = 0;
         let mut decoding_output =
             decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
-        let mut i = 0;
-        // TODO(mbernat): This loop is very random, try to understand it better.
-        // It has something to do with the latency settings and the decoding output for the current
-        // packet only being available in the later `decode()` calls.
-        while i < DECODE_TRIES && decoding_output.frame_count == 0 {
-            let packet_timestamp = i as i64;
-            // `decoding_output` borrows the decoder and has to be dropped before another decoding.
-            drop(decoding_output);
-            decoding_output =
-                decoder.decode_many(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
-            i += 1;
-        }
-
         let _ = decoding_output.frames.next().unwrap();
 
         total_time += start.elapsed();
