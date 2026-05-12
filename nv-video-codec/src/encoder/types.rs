@@ -187,7 +187,8 @@ pub struct NvEncoderParams {
     pub codec: EncodeCodec,
     pub preset: EncodePreset,
     pub tuning_info: EncodeTuningInfo,
-    pub frame_rate: f64,
+    pub frame_rate_numerator: u32,
+    pub frame_rate_denominator: u32,
     pub repeat_spspps: bool,
     pub rate_control: EncodeRateControl,
 }

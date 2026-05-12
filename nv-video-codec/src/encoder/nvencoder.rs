@@ -40,10 +40,6 @@ const NV_ENC_CREATE_MV_BUFFER_VER: u32 = nvenc_api_struct_version(1);
 const NV_ENC_MAP_INPUT_RESOURCE_VER: u32 = nvenc_api_struct_version(4);
 const NV_ENC_REGISTER_RESOURCE_VER: u32 = nvenc_api_struct_version(3);
 
-// We accept frame rate as float, but NVENC API expects uint32 numerator and denominator. We set
-// a constant denominator as a tradeoff between precision and representable range.
-const FRAME_RATE_DENOMINATOR: u32 = 1000;
-
 #[repr(C)]
 pub(super) struct EncoderHandle {
     _data: [u8; 0],
@@ -171,7 +167,8 @@ where
     pub fn set_bitrate_and_frame_rate(
         &mut self,
         bitrate: u32,
-        frame_rate: f64,
+        frame_rate_numerator: u32,
+        frame_rate_denominator: u32,
     ) -> NvEncoderResult<()> {
         let mut params = _NV_ENC_RECONFIGURE_PARAMS {
             version: NV_ENC_RECONFIGURE_PARAMS_VER,
@@ -181,12 +178,13 @@ where
         params.set_resetEncoder(1);
         params.set_forceIDR(1);
 
-        self.initialize_params.frameRateNum = (frame_rate * FRAME_RATE_DENOMINATOR as f64) as u32;
-        self.initialize_params.frameRateDen = FRAME_RATE_DENOMINATOR;
+        self.initialize_params.frameRateNum = frame_rate_numerator;
+        self.initialize_params.frameRateDen = frame_rate_denominator;
 
         self.encode_config.rcParams.averageBitRate = bitrate;
         self.encode_config.rcParams.maxBitRate = bitrate;
 
+        let frame_rate = frame_rate_numerator as f64 / frame_rate_denominator as f64;
         let frame_size_in_bits = bitrate / frame_rate as u32;
         self.encode_config.rcParams.vbvBufferSize = frame_size_in_bits;
         self.encode_config.rcParams.vbvInitialDelay = frame_size_in_bits;
@@ -353,8 +351,8 @@ where
             encodeHeight: self.height,
             darWidth: self.width,
             darHeight: self.height,
-            frameRateNum: (params.frame_rate * FRAME_RATE_DENOMINATOR as f64) as u32,
-            frameRateDen: FRAME_RATE_DENOMINATOR,
+            frameRateNum: params.frame_rate_numerator,
+            frameRateDen: params.frame_rate_denominator,
             enablePTD: 1,
             maxEncodeWidth: self.width,
             maxEncodeHeight: self.height,
