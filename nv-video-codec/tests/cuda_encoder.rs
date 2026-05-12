@@ -14,7 +14,6 @@ use nv_video_codec::{
 };
 use simple_logger::SimpleLogger;
 use std::{
-    io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -94,11 +93,6 @@ fn encode_single_frame_grayscale() -> Result<()> {
     encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
     assert_eq!(packet.len(), 1);
 
-    let mut f = std::fs::File::create("encode_out_grayscale.hevc")?;
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
-
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
 
@@ -115,7 +109,6 @@ fn encode_multi_frame_3k() -> Result<()> {
     let data = include_bytes!("../resources/test/decode_out_3k.nv12");
     assert_eq!(data.len(), encoder.get_frame_size()? as usize);
 
-    let mut f = std::fs::File::create("encode_out_3k.hevc")?;
     let mut packet = Vec::new();
 
     #[cfg(feature = "torture")]
@@ -126,16 +119,27 @@ fn encode_multi_frame_3k() -> Result<()> {
     let mut total_time = Duration::from_millis(0);
     let mut blocked_time = Duration::from_millis(0);
     let mut frames_encoded = 0;
+
+    let mut force_i_frame = true;
+
     for _ in 0..NUM_TORTURE_FRAMES {
         let start_time = Instant::now();
 
         let _resource = encoder.get_next_input_resource();
         // TODO: Copy data to resource
 
-        // force intra-frame and force per-frame metadata
-        let pic_flags = EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER;
+        let pic_flags = if force_i_frame {
+            // force intra-frame and per-frame metadata
+            EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER
+        } else {
+            EncodePicFlags::empty()
+        };
         encoder.encode_frame(&mut packet, pic_flags)?;
         assert_eq!(packet.len(), 1);
+
+        if !packet.is_empty() {
+            force_i_frame = false;
+        }
 
         frames_encoded += 1;
         total_time += start_time.elapsed();
@@ -157,10 +161,6 @@ fn encode_multi_frame_3k() -> Result<()> {
         total_time,
         total_time / NUM_TORTURE_FRAMES as u32
     );
-
-    for frame in &packet {
-        f.write_all(frame)?;
-    }
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
