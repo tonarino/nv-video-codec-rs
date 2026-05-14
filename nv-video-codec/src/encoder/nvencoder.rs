@@ -390,7 +390,7 @@ where
         }
 
         initialize_params.frameRateNum = params.frame_rate;
-        params.apply_to_encode_config(self.get_frame_size()?, &mut encode_config);
+        params.apply_to_encode_config(&mut encode_config);
         Self::validate_encode_config(encode_config, params.codec, self.buffer_format)?;
 
         Ok((initialize_params, encode_config))
