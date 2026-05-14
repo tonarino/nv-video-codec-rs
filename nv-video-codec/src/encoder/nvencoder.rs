@@ -19,7 +19,7 @@ use nv_video_codec_sys::{
     NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_RECONFIGURE_PARAMS,
     NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
 };
-use std::{ffi::c_void, marker::PhantomData, ptr::null_mut};
+use std::{ffi::c_void, marker::PhantomData};
 
 pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
     NVENCAPI_VERSION | ((version) << 16) | (0x7 << 28)
@@ -113,6 +113,7 @@ where
         let (mut initialize_params, mut encode_config) =
             self.create_initialize_params_and_config(params)?;
 
+        self.initialize_params = initialize_params;
         initialize_params.encodeConfig = &raw mut encode_config;
 
         unsafe {
@@ -123,10 +124,7 @@ where
             .into_nvenc_result()?;
         }
 
-        initialize_params.encodeConfig = null_mut();
-        self.initialize_params = initialize_params;
         self.encode_config = encode_config;
-
         self.encoder_initialized = true;
 
         // TODO(efyang): convert this to a usize
