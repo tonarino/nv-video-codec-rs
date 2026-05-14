@@ -202,7 +202,7 @@ pub fn upload_nv12_data_to_cuda_resource(
         srcHost: data.as_ptr() as *const c_void,
         srcPitch: width,
         dstMemoryType: CUmemorytype_enum::CU_MEMORYTYPE_DEVICE,
-        dstDevice: resource.buffer() as CUdeviceptr,
+        dstDevice: resource.as_mut_ptr() as CUdeviceptr,
         dstPitch: resource.pitch(),
         WidthInBytes: width,
         Height: luma_height + chroma_height,
