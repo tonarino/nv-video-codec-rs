@@ -9,14 +9,15 @@ use crate::{
     guids::EncodeCodec,
 };
 use nv_video_codec_sys::{
-    NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT, GUID,
-    NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH,
-    NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS, NV_ENC_CAPS_PARAM,
-    NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE,
-    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
-    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
-    NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_REGISTERED_PTR,
-    NV_ENC_REGISTER_RESOURCE,
+    NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
+    _NV_ENC_RECONFIGURE_PARAMS, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
+    NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
+    NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
+    NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
+    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
+    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
+    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_RECONFIGURE_PARAMS,
+    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
 };
 use std::{ffi::c_void, marker::PhantomData};
 
@@ -27,6 +28,7 @@ pub(super) const fn nvenc_api_struct_version(version: u32) -> u32 {
 const NV_ENCODE_API_FUNCTION_LIST_VERSION: u32 = nvenc_api_struct_version(2);
 const NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER: u32 = nvenc_api_struct_version(1);
 const NV_ENC_INITIALIZE_PARAMS_VER: u32 = nvenc_api_struct_version(5) | (1 << 31);
+const NV_ENC_RECONFIGURE_PARAMS_VER: u32 = nvenc_api_struct_version(1) | (1 << 31);
 // TODO: just make these versions in the custom defaults
 pub(super) const NV_ENC_CONFIG_VER: u32 = nvenc_api_struct_version(7) | (1 << 31);
 pub(super) const NV_ENC_PRESET_CONFIG_VER: u32 = nvenc_api_struct_version(4) | (1 << 31);
@@ -88,6 +90,8 @@ where
     device: *mut Device, // Originally a void pointer
     device_type: NV_ENC_DEVICE_TYPE,
     encoder_initialized: bool,
+    initialize_params: NV_ENC_INITIALIZE_PARAMS,
+    encode_config: NV_ENC_CONFIG,
     extra_output_delay: u32,
     bitstream_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
     motion_vector_data_output_buffer: Vec<NV_ENC_OUTPUT_PTR>,
@@ -109,6 +113,7 @@ where
         let (mut initialize_params, mut encode_config) =
             self.create_initialize_params_and_config(params)?;
 
+        self.initialize_params = initialize_params;
         initialize_params.encodeConfig = &raw mut encode_config;
 
         unsafe {
@@ -119,6 +124,7 @@ where
             .into_nvenc_result()?;
         }
 
+        self.encode_config = encode_config;
         self.encoder_initialized = true;
 
         // TODO(efyang): convert this to a usize
@@ -156,10 +162,55 @@ where
         Ok(())
     }
 
-    // not implementing for now
-    // pub fn reconfigure() -> bool {
-    //     unimplemented!()
-    // }
+    pub fn set_bitrate_and_frame_rate(
+        &mut self,
+        bitrate: u32,
+        frame_rate_numerator: u32,
+        frame_rate_denominator: u32,
+    ) -> NvEncoderResult<()> {
+        let mut params = _NV_ENC_RECONFIGURE_PARAMS {
+            version: NV_ENC_RECONFIGURE_PARAMS_VER,
+            ..Default::default()
+        };
+
+        params.set_resetEncoder(1);
+        params.set_forceIDR(1);
+
+        self.initialize_params.frameRateNum = frame_rate_numerator;
+        self.initialize_params.frameRateDen = frame_rate_denominator;
+
+        self.encode_config.rcParams.averageBitRate = bitrate;
+        self.encode_config.rcParams.maxBitRate = bitrate;
+
+        let frame_rate = frame_rate_numerator as f64 / frame_rate_denominator as f64;
+        let frame_size_in_bits = bitrate / frame_rate as u32;
+        self.encode_config.rcParams.vbvBufferSize = frame_size_in_bits;
+        self.encode_config.rcParams.vbvInitialDelay = frame_size_in_bits;
+
+        self.reconfigure(params)?;
+
+        Ok(())
+    }
+
+    fn reconfigure(&mut self, mut params: NV_ENC_RECONFIGURE_PARAMS) -> NvEncoderResult<()> {
+        params.reInitEncodeParams = self.initialize_params;
+        params.reInitEncodeParams.encodeConfig = &raw mut self.encode_config;
+
+        unsafe {
+            self.nv_encode_api_function_list.nvEncReconfigureEncoder.unwrap()(
+                self.encoder_handle as *mut c_void,
+                &raw mut params,
+            )
+            .into_nvenc_result()?;
+        }
+
+        self.width = params.reInitEncodeParams.encodeWidth;
+        self.height = params.reInitEncodeParams.encodeHeight;
+        self.max_encode_width = params.reInitEncodeParams.maxEncodeWidth;
+        self.max_encode_height = params.reInitEncodeParams.maxEncodeHeight;
+
+        Ok(())
+    }
 
     // TODO: make this (and get_next_reference_frame) optional
     pub fn get_next_input_frame(&mut self) -> &mut NvEncInputFrame {
@@ -298,8 +349,8 @@ where
             encodeHeight: self.height,
             darWidth: self.width,
             darHeight: self.height,
-            frameRateNum: 30, // TODO(efyang): possible optimization?
-            frameRateDen: 1,
+            frameRateNum: params.frame_rate_numerator,
+            frameRateDen: params.frame_rate_denominator,
             enablePTD: 1,
             maxEncodeWidth: self.width,
             maxEncodeHeight: self.height,
@@ -389,7 +440,6 @@ where
             },
         }
 
-        initialize_params.frameRateNum = params.frame_rate;
         params.apply_to_encode_config(&mut encode_config);
         Self::validate_encode_config(encode_config, params.codec, self.buffer_format)?;
 
@@ -533,6 +583,8 @@ where
             device,
             device_type,
             encoder_initialized: false,
+            initialize_params: Default::default(),
+            encode_config: CustomDefault::default(),
             extra_output_delay,
             bitstream_output_buffer: Vec::new(),
             motion_vector_data_output_buffer: Vec::new(),
