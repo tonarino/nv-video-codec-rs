@@ -588,6 +588,7 @@ impl<A: FrameAllocator> NvDecoder<A> {
         packet_flags: DecoderPacketFlags,
         packet_timestamp: i64,
     ) -> Result<DecodingOutput<Option<Frame<'_, A>>>, NvDecoderError> {
+        let packet_flags = packet_flags | DecoderPacketFlags::END_OF_PICTURE;
         self.decode_packet(packet_data, packet_flags, packet_timestamp)?;
         let frame = self.frames.front().map(|raw| raw.from_raw_parts());
 
