@@ -58,7 +58,7 @@ fn run_basic_decode2(
     let start = std::time::Instant::now();
     let packet_timestamp = 0;
     let decoding_output =
-        decoder.decode_one(data, DecoderPacketFlags::END_OF_PICTURE, packet_timestamp)?;
+        decoder.decode_one(data, DecoderPacketFlags::empty(), packet_timestamp)?;
 
     let Some(frame_info) = &decoding_output.frame_info else {
         return Ok((vec![], false));
