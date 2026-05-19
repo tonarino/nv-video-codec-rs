@@ -1,11 +1,18 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodeCodec {
     H264,
     #[default]
     Hevc,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodeProfile {
     #[default]
     AutoSelect,
@@ -20,7 +27,9 @@ pub enum EncodeProfile {
 /// ```
 ///
 /// https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html#multi-nvenc-split-frame-encoding-in-hevc-and-av1
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodePreset {
     P1,
     #[default]
@@ -28,7 +37,9 @@ pub enum EncodePreset {
     P7,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodeRateControlMode {
     #[default]
     ConstantQp,
@@ -36,7 +47,9 @@ pub enum EncodeRateControlMode {
     ConstantBitrate,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodeMultiPass {
     #[default]
     Disabled,
@@ -45,7 +58,9 @@ pub enum EncodeMultiPass {
 }
 
 /// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub enum EncodeTuningInfo {
     HighQuality,
     #[default]
@@ -54,7 +69,9 @@ pub enum EncodeTuningInfo {
     Lossless,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub struct EncodeRateControl {
     pub mode: EncodeRateControlMode,
     pub low_delay_key_frame_scale: u8,
@@ -65,7 +82,9 @@ pub struct EncodeRateControl {
     pub multi_pass: EncodeMultiPass,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub struct NvEncoderParams {
     pub codec: EncodeCodec,
     pub preset: EncodePreset,
