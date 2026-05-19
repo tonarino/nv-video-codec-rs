@@ -1,0 +1,77 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeCodec {
+    H264,
+    #[default]
+    Hevc,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeProfile {
+    #[default]
+    AutoSelect,
+}
+
+/// ```ignore
+///                     Preset
+/// Tuning Info         P1 P2 P3 P4 P5 P6 P7
+/// High Quality        Y  Y  N  N  N  N  N
+/// Low Latency         Y  Y  Y  Y  N  N  N
+/// Ultra Low Latency   Y  Y  Y  Y  N  N  N
+/// ```
+///
+/// https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html#multi-nvenc-split-frame-encoding-in-hevc-and-av1
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodePreset {
+    P1,
+    #[default]
+    P3,
+    P7,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeRateControlMode {
+    #[default]
+    ConstantQp,
+    VariableBitrate,
+    ConstantBitrate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeMultiPass {
+    #[default]
+    Disabled,
+    TwoPassQuarterResolution,
+    TwoPassFullResolution,
+}
+
+/// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum EncodeTuningInfo {
+    HighQuality,
+    #[default]
+    LowLatency,
+    UltraLowLatency,
+    Lossless,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EncodeRateControl {
+    pub mode: EncodeRateControlMode,
+    pub low_delay_key_frame_scale: u8,
+    pub bit_rate: u32,
+    pub vbv_buffer_size_bits: u32,
+    pub vbv_buffer_initial_delay: u32,
+    pub enable_aq: bool,
+    pub multi_pass: EncodeMultiPass,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+pub struct NvEncoderParams {
+    pub codec: EncodeCodec,
+    pub preset: EncodePreset,
+    pub tuning_info: EncodeTuningInfo,
+    pub frame_rate_numerator: u32,
+    pub frame_rate_denominator: u32,
+    pub repeat_spspps: bool,
+    pub rate_control: EncodeRateControl,
+}

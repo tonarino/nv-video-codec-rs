@@ -1,9 +1,13 @@
 use super::{NvEncError, NvEncoderError};
-use crate::guids::{EncodeCodec, EncodePreset};
+use crate::guids::EncodeCodec;
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
     self as ffi, NV_ENC_CONFIG, NV_ENC_MULTI_PASS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS,
     NV_ENC_TUNING_INFO,
+};
+
+pub use nv_video_codec_config::{
+    EncodeMultiPass, EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams,
 };
 
 ffi_enum! {
@@ -108,16 +112,22 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodeRateControlMode {
-    #[default]
-    ConstantQp,
-    VariableBitrate,
-    ConstantBitrate,
+pub(crate) trait FfiFrom<T> {
+    fn ffi_from(value: T) -> Self;
 }
 
-impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
-    fn from(value: EncodeRateControlMode) -> Self {
+pub(crate) trait FfiInto<T> {
+    fn ffi_into(self) -> T;
+}
+
+impl<T, U: FfiFrom<T>> FfiInto<U> for T {
+    fn ffi_into(self) -> U {
+        U::ffi_from(self)
+    }
+}
+
+impl FfiFrom<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
+    fn ffi_from(value: EncodeRateControlMode) -> Self {
         use NV_ENC_PARAMS_RC_MODE as MODE;
 
         match value {
@@ -128,16 +138,8 @@ impl From<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodeMultiPass {
-    #[default]
-    Disabled,
-    TwoPassQuarterResolution,
-    TwoPassFullResolution,
-}
-
-impl From<EncodeMultiPass> for NV_ENC_MULTI_PASS {
-    fn from(value: EncodeMultiPass) -> Self {
+impl FfiFrom<EncodeMultiPass> for NV_ENC_MULTI_PASS {
+    fn ffi_from(value: EncodeMultiPass) -> Self {
         use NV_ENC_MULTI_PASS as PASS;
 
         match value {
@@ -148,18 +150,8 @@ impl From<EncodeMultiPass> for NV_ENC_MULTI_PASS {
     }
 }
 
-/// Tuning information of NVENC encoding (not applicable to H264 and HEVC MEOnly mode).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodeTuningInfo {
-    HighQuality,
-    #[default]
-    LowLatency,
-    UltraLowLatency,
-    Lossless,
-}
-
-impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
-    fn from(value: EncodeTuningInfo) -> Self {
+impl FfiFrom<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
+    fn ffi_from(value: EncodeTuningInfo) -> Self {
         match value {
             EncodeTuningInfo::HighQuality => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_HIGH_QUALITY,
             EncodeTuningInfo::LowLatency => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
@@ -171,56 +163,35 @@ impl From<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EncodeRateControl {
-    pub mode: EncodeRateControlMode,
-    pub low_delay_key_frame_scale: u8,
-    pub bit_rate: u32,
-    pub vbv_buffer_size_bits: u32,
-    pub vbv_buffer_initial_delay: u32,
-    pub enable_aq: bool,
-    pub multi_pass: EncodeMultiPass,
-}
+pub(crate) fn apply_params_to_encode_config(
+    params: NvEncoderParams,
+    encode_config: &mut NV_ENC_CONFIG,
+) {
+    encode_config.rcParams.rateControlMode = params.rate_control.mode.ffi_into();
+    encode_config.rcParams.lowDelayKeyFrameScale = params.rate_control.low_delay_key_frame_scale;
+    encode_config.rcParams.averageBitRate = params.rate_control.bit_rate;
+    encode_config.rcParams.maxBitRate = params.rate_control.bit_rate;
+    encode_config.rcParams.vbvBufferSize = params.rate_control.vbv_buffer_size_bits;
+    encode_config.rcParams.vbvInitialDelay = params.rate_control.vbv_buffer_initial_delay;
+    encode_config.rcParams.set_enableAQ(params.rate_control.enable_aq as u32);
+    encode_config.rcParams.multiPass = params.rate_control.multi_pass.ffi_into();
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
-pub struct NvEncoderParams {
-    pub codec: EncodeCodec,
-    pub preset: EncodePreset,
-    pub tuning_info: EncodeTuningInfo,
-    pub frame_rate_numerator: u32,
-    pub frame_rate_denominator: u32,
-    pub repeat_spspps: bool,
-    pub rate_control: EncodeRateControl,
-}
-
-impl NvEncoderParams {
-    pub(crate) fn apply_to_encode_config(&self, encode_config: &mut NV_ENC_CONFIG) {
-        encode_config.rcParams.rateControlMode = self.rate_control.mode.into();
-        encode_config.rcParams.lowDelayKeyFrameScale = self.rate_control.low_delay_key_frame_scale;
-        encode_config.rcParams.averageBitRate = self.rate_control.bit_rate;
-        encode_config.rcParams.maxBitRate = self.rate_control.bit_rate;
-        encode_config.rcParams.vbvBufferSize = self.rate_control.vbv_buffer_size_bits;
-        encode_config.rcParams.vbvInitialDelay = self.rate_control.vbv_buffer_initial_delay;
-        encode_config.rcParams.set_enableAQ(self.rate_control.enable_aq as u32);
-        encode_config.rcParams.multiPass = self.rate_control.multi_pass.into();
-
-        match self.codec {
-            EncodeCodec::H264 =>
-            // SAFETY: We checked the codec is H264, so we can access the union field.
-            unsafe {
-                encode_config
-                    .encodeCodecConfig
-                    .h264Config
-                    .set_repeatSPSPPS(self.repeat_spspps as u32);
-            },
-            EncodeCodec::Hevc =>
-            // SAFETY: We checked the codec is HEVC, so we can access the union field.
-            unsafe {
-                encode_config
-                    .encodeCodecConfig
-                    .hevcConfig
-                    .set_repeatSPSPPS(self.repeat_spspps as u32);
-            },
-        }
+    match params.codec {
+        EncodeCodec::H264 =>
+        // SAFETY: We checked the codec is H264, so we can access the union field.
+        unsafe {
+            encode_config
+                .encodeCodecConfig
+                .h264Config
+                .set_repeatSPSPPS(params.repeat_spspps as u32);
+        },
+        EncodeCodec::Hevc =>
+        // SAFETY: We checked the codec is HEVC, so we can access the union field.
+        unsafe {
+            encode_config
+                .encodeCodecConfig
+                .hevcConfig
+                .set_repeatSPSPPS(params.repeat_spspps as u32);
+        },
     }
 }
