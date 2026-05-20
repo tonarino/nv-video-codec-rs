@@ -112,22 +112,25 @@ bitflags! {
     }
 }
 
-pub(crate) trait FfiFrom<T> {
-    fn ffi_from(value: T) -> Self;
+/// This is the same as the standard [`From`] trait, which we cannot use because of the orphan rule.
+pub(crate) trait FromConfig<T> {
+    fn from_config(value: T) -> Self;
 }
 
-pub(crate) trait FfiInto<T> {
-    fn ffi_into(self) -> T;
+/// This is the same as the standard [`Into`] trait, which we cannot use because of the orphan rule.
+pub(crate) trait IntoFfi<T> {
+    fn into_ffi(self) -> T;
 }
 
-impl<T, U: FfiFrom<T>> FfiInto<U> for T {
-    fn ffi_into(self) -> U {
-        U::ffi_from(self)
+/// Implement Into for everything that implements From the other way.
+impl<T, U: FromConfig<T>> IntoFfi<U> for T {
+    fn into_ffi(self) -> U {
+        U::from_config(self)
     }
 }
 
-impl FfiFrom<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
-    fn ffi_from(value: EncodeRateControlMode) -> Self {
+impl FromConfig<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
+    fn from_config(value: EncodeRateControlMode) -> Self {
         use NV_ENC_PARAMS_RC_MODE as MODE;
 
         match value {
@@ -138,8 +141,8 @@ impl FfiFrom<EncodeRateControlMode> for NV_ENC_PARAMS_RC_MODE {
     }
 }
 
-impl FfiFrom<EncodeMultiPass> for NV_ENC_MULTI_PASS {
-    fn ffi_from(value: EncodeMultiPass) -> Self {
+impl FromConfig<EncodeMultiPass> for NV_ENC_MULTI_PASS {
+    fn from_config(value: EncodeMultiPass) -> Self {
         use NV_ENC_MULTI_PASS as PASS;
 
         match value {
@@ -150,8 +153,8 @@ impl FfiFrom<EncodeMultiPass> for NV_ENC_MULTI_PASS {
     }
 }
 
-impl FfiFrom<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
-    fn ffi_from(value: EncodeTuningInfo) -> Self {
+impl FromConfig<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
+    fn from_config(value: EncodeTuningInfo) -> Self {
         match value {
             EncodeTuningInfo::HighQuality => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_HIGH_QUALITY,
             EncodeTuningInfo::LowLatency => NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY,
@@ -167,14 +170,14 @@ pub(crate) fn apply_params_to_encode_config(
     params: NvEncoderParams,
     encode_config: &mut NV_ENC_CONFIG,
 ) {
-    encode_config.rcParams.rateControlMode = params.rate_control.mode.ffi_into();
+    encode_config.rcParams.rateControlMode = params.rate_control.mode.into_ffi();
     encode_config.rcParams.lowDelayKeyFrameScale = params.rate_control.low_delay_key_frame_scale;
     encode_config.rcParams.averageBitRate = params.rate_control.bit_rate;
     encode_config.rcParams.maxBitRate = params.rate_control.bit_rate;
     encode_config.rcParams.vbvBufferSize = params.rate_control.vbv_buffer_size_bits;
     encode_config.rcParams.vbvInitialDelay = params.rate_control.vbv_buffer_initial_delay;
     encode_config.rcParams.set_enableAQ(params.rate_control.enable_aq as u32);
-    encode_config.rcParams.multiPass = params.rate_control.multi_pass.ffi_into();
+    encode_config.rcParams.multiPass = params.rate_control.multi_pass.into_ffi();
 
     match params.codec {
         EncodeCodec::H264 =>

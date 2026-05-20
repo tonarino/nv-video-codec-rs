@@ -7,7 +7,7 @@ use super::{
 use crate::{
     encoder::{
         apply_params_to_encode_config, defaults::CustomDefault, EncodePicFlags,
-        EncodeRateControlMode, FfiInto as _, NvEncoderParams,
+        EncodeRateControlMode, IntoFfi as _, NvEncoderParams,
     },
     guids::{EncodeCodec, IntoGuid as _},
 };
@@ -384,10 +384,10 @@ where
         let mut encode_config = preset_config.presetCfg;
         encode_config.frameIntervalP = 1;
         encode_config.gopLength = NVENC_INFINITE_GOPLENGTH;
-        encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.ffi_into();
+        encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into_ffi();
 
         if !self.motion_estimation_only {
-            initialize_params.tuningInfo = params.tuning_info.ffi_into();
+            initialize_params.tuningInfo = params.tuning_info.into_ffi();
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
                 presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
@@ -398,7 +398,7 @@ where
                     self.encoder_handle as *mut _,
                     params.codec.into_guid(),
                     params.preset.into_guid(),
-                    params.tuning_info.ffi_into(),
+                    params.tuning_info.into_ffi(),
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
@@ -407,7 +407,7 @@ where
             }
         } else {
             encode_config.version = NV_ENC_CONFIG_VER;
-            encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.ffi_into();
+            encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into_ffi();
             encode_config.rcParams.constQP = NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }
 
