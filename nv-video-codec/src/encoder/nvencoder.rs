@@ -5,8 +5,11 @@ use super::{
     NvEncoderError, NvEncoderResult,
 };
 use crate::{
-    encoder::{defaults::CustomDefault, EncodePicFlags, EncodeRateControlMode, NvEncoderParams},
-    guids::EncodeCodec,
+    encoder::{
+        apply_params_to_encode_config, defaults::CustomDefault, EncodePicFlags,
+        EncodeRateControlMode, IntoFfi as _, NvEncoderParams,
+    },
+    guids::{EncodeCodec, IntoGuid as _},
 };
 use nv_video_codec_sys::{
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
@@ -343,8 +346,8 @@ where
         // nvpipe doesn't even use this
         let mut initialize_params = NV_ENC_INITIALIZE_PARAMS {
             version: NV_ENC_INITIALIZE_PARAMS_VER, // TODO(efyang) actual const func for this
-            encodeGUID: params.codec.as_guid(),
-            presetGUID: params.preset.as_guid(),
+            encodeGUID: params.codec.into_guid(),
+            presetGUID: params.preset.into_guid(),
             encodeWidth: self.width,
             encodeHeight: self.height,
             darWidth: self.width,
@@ -371,8 +374,8 @@ where
                 .nvEncGetEncodePresetConfig
                 .expect("Invalid nvEncGetEncodePresetConfig ptr")(
                 self.encoder_handle as *mut _,
-                params.codec.as_guid(),
-                params.preset.as_guid(),
+                params.codec.into_guid(),
+                params.preset.into_guid(),
                 &mut preset_config,
             )
             .into_nvenc_result()?;
@@ -381,10 +384,10 @@ where
         let mut encode_config = preset_config.presetCfg;
         encode_config.frameIntervalP = 1;
         encode_config.gopLength = NVENC_INFINITE_GOPLENGTH;
-        encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
+        encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into_ffi();
 
         if !self.motion_estimation_only {
-            initialize_params.tuningInfo = params.tuning_info.into();
+            initialize_params.tuningInfo = params.tuning_info.into_ffi();
             let mut preset_config = NV_ENC_PRESET_CONFIG {
                 version: NV_ENC_PRESET_CONFIG_VER,
                 presetCfg: NV_ENC_CONFIG { version: NV_ENC_CONFIG_VER, ..CustomDefault::default() },
@@ -393,9 +396,9 @@ where
             unsafe {
                 self.nv_encode_api_function_list.nvEncGetEncodePresetConfigEx.unwrap()(
                     self.encoder_handle as *mut _,
-                    params.codec.as_guid(),
-                    params.preset.as_guid(),
-                    params.tuning_info.into(),
+                    params.codec.into_guid(),
+                    params.preset.into_guid(),
+                    params.tuning_info.into_ffi(),
                     &mut preset_config,
                 )
                 .into_nvenc_result()?;
@@ -404,7 +407,7 @@ where
             }
         } else {
             encode_config.version = NV_ENC_CONFIG_VER;
-            encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into();
+            encode_config.rcParams.rateControlMode = EncodeRateControlMode::ConstantQp.into_ffi();
             encode_config.rcParams.constQP = NV_ENC_QP { qpInterP: 28, qpInterB: 31, qpIntra: 25 };
         }
 
@@ -440,7 +443,7 @@ where
             },
         }
 
-        params.apply_to_encode_config(&mut encode_config);
+        apply_params_to_encode_config(params, &mut encode_config);
         Self::validate_encode_config(encode_config, params.codec, self.buffer_format)?;
 
         Ok((initialize_params, encode_config))

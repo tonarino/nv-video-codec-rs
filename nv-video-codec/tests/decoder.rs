@@ -123,7 +123,7 @@ fn decode_h265_3k_p_frame_device() -> Result<()> {
     let data = include_bytes!("../resources/test/single_p_frame_3k.hevc");
     let (frame, intra_pic_flag) =
         run_basic_decode2(&mut decoder, "decode_h265_3k_p_frame_device, part 0", data, 3088, 2076)?;
-    assert_eq!(frame, vec![]);
+    assert!(frame.is_empty());
     assert!(!intra_pic_flag);
 
     let data = include_bytes!("../resources/test/single_i_frame_3k.hevc");

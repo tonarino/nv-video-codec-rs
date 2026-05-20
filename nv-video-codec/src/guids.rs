@@ -6,16 +6,14 @@ use nv_video_codec_sys::{
     GUID,
 };
 
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodeCodec {
-    H264,
-    #[default]
-    Hevc,
+pub use nv_video_codec_config::{EncodeCodec, EncodePreset, EncodeProfile};
+
+pub(crate) trait IntoGuid {
+    fn into_guid(self) -> GUID;
 }
 
-impl EncodeCodec {
-    pub(crate) fn as_guid(&self) -> GUID {
+impl IntoGuid for EncodeCodec {
+    fn into_guid(self) -> GUID {
         match self {
             EncodeCodec::H264 => NV_ENC_CODEC_H264_GUID,
             EncodeCodec::Hevc => NV_ENC_CODEC_HEVC_GUID,
@@ -23,41 +21,16 @@ impl EncodeCodec {
     }
 }
 
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodeProfile {
-    #[default]
-    AutoSelect,
-}
-
-impl EncodeProfile {
-    pub(crate) fn as_guid(&self) -> GUID {
+impl IntoGuid for EncodeProfile {
+    fn into_guid(self) -> GUID {
         match self {
             EncodeProfile::AutoSelect => NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID,
         }
     }
 }
 
-/// ```ignore
-///                     Preset
-/// Tuning Info         P1 P2 P3 P4 P5 P6 P7
-/// High Quality        Y  Y  N  N  N  N  N
-/// Low Latency         Y  Y  Y  Y  N  N  N
-/// Ultra Low Latency   Y  Y  Y  Y  N  N  N
-/// ```
-///
-/// https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html#multi-nvenc-split-frame-encoding-in-hevc-and-av1
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum EncodePreset {
-    P1,
-    #[default]
-    P3,
-    P7,
-}
-
-impl EncodePreset {
-    pub(crate) fn as_guid(&self) -> GUID {
+impl IntoGuid for EncodePreset {
+    fn into_guid(self) -> GUID {
         match self {
             EncodePreset::P1 => NV_ENC_PRESET_P1_GUID,
             EncodePreset::P3 => NV_ENC_PRESET_P3_GUID,

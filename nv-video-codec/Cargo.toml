@@ -14,6 +14,7 @@ bitflags = "1.2"
 cuda-gl-interop = { version = "0.1.0", git = "https://github.com/tonarino/cuda-gl-interop" }
 gl = "0.14"
 log = "0.4"
+nv-video-codec-config = { path = "../nv-video-codec-config" }
 nv-video-codec-sys = { path = "../nv-video-codec-sys" }
 parking_lot = "0.11"
 cudarc = { version = "0.19", features = ["cuda-version-from-build-system", "dynamic-linking"] }
