@@ -12,15 +12,15 @@ use crate::{
     guids::{EncodeCodec, IntoGuid as _},
 };
 use nv_video_codec_sys::{
-    NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
-    _NV_ENC_RECONFIGURE_PARAMS, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
-    NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
-    NV_ENC_CAPS, NV_ENC_CAPS_PARAM, NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER,
-    NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE, NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR,
-    NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM, NV_ENC_MAP_INPUT_RESOURCE,
-    NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, NV_ENC_OUTPUT_PTR,
-    NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP, NV_ENC_RECONFIGURE_PARAMS,
-    NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE,
+    NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, GUID, NVENCAPI_MAJOR_VERSION,
+    NVENCAPI_MINOR_VERSION, NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH,
+    NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE, NV_ENC_CAPS, NV_ENC_CAPS_PARAM,
+    NV_ENC_CONFIG, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_MV_BUFFER, NV_ENC_DEVICE_TYPE,
+    NV_ENC_INITIALIZE_PARAMS, NV_ENC_INPUT_PTR, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
+    NV_ENC_MAP_INPUT_RESOURCE, NV_ENC_MEONLY_PARAMS, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
+    NV_ENC_OUTPUT_PTR, NV_ENC_PIC_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_QP,
+    NV_ENC_RECONFIGURE_PARAMS, NV_ENC_REGISTERED_PTR, NV_ENC_REGISTER_RESOURCE, _NV_ENC_PIC_STRUCT,
+    _NV_ENC_RECONFIGURE_PARAMS,
 };
 use std::{ffi::c_void, marker::PhantomData};
 
@@ -231,6 +231,7 @@ where
         &mut self,
         packet: &mut Vec<&[u8]>,
         pic_flags: EncodePicFlags,
+        qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -244,6 +245,7 @@ where
             self.mapped_input_buffers[buffer_index as usize],
             self.bitstream_output_buffer[buffer_index as usize],
             pic_flags,
+            qp_delta_map,
         );
 
         match encode_status {
@@ -762,6 +764,7 @@ where
         input_buffer: NV_ENC_INPUT_PTR,
         output_buffer: NV_ENC_OUTPUT_PTR,
         pic_flags: EncodePicFlags,
+        qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -777,6 +780,8 @@ where
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
             encodePicFlags: pic_flags.bits(),
+            qpDeltaMap: qp_delta_map.map_or(std::ptr::null::<i8>(), |m| m.as_ptr()) as *mut _,
+            qpDeltaMapSize: qp_delta_map.map_or(0, |m| m.len() as u32),
             ..Default::default()
         };
 

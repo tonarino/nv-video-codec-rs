@@ -3,11 +3,12 @@ use crate::guids::EncodeCodec;
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
     self as ffi, NV_ENC_CONFIG, NV_ENC_MULTI_PASS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS,
-    NV_ENC_TUNING_INFO,
+    NV_ENC_QP_MAP_MODE, NV_ENC_TUNING_INFO,
 };
 
 pub use nv_video_codec_config::{
-    EncodeMultiPass, EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderParams,
+    EncodeMultiPass, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo,
+    NvEncoderParams,
 };
 
 ffi_enum! {
@@ -153,6 +154,18 @@ impl FromConfig<EncodeMultiPass> for NV_ENC_MULTI_PASS {
     }
 }
 
+impl FromConfig<EncodeQpMapMode> for NV_ENC_QP_MAP_MODE {
+    fn from_config(value: EncodeQpMapMode) -> Self {
+        use NV_ENC_QP_MAP_MODE as MODE;
+
+        match value {
+            EncodeQpMapMode::Disabled => MODE::NV_ENC_QP_MAP_DISABLED,
+            EncodeQpMapMode::Emphasis => MODE::NV_ENC_QP_MAP_EMPHASIS,
+            EncodeQpMapMode::Delta => MODE::NV_ENC_QP_MAP_DELTA,
+        }
+    }
+}
+
 impl FromConfig<EncodeTuningInfo> for NV_ENC_TUNING_INFO {
     fn from_config(value: EncodeTuningInfo) -> Self {
         match value {
@@ -178,6 +191,7 @@ pub(crate) fn apply_params_to_encode_config(
     encode_config.rcParams.vbvInitialDelay = params.rate_control.vbv_buffer_initial_delay;
     encode_config.rcParams.set_enableAQ(params.rate_control.enable_aq as u32);
     encode_config.rcParams.multiPass = params.rate_control.multi_pass.into_ffi();
+    encode_config.rcParams.qpMapMode = params.qp_map_mode.into_ffi();
 
     match params.codec {
         EncodeCodec::H264 =>

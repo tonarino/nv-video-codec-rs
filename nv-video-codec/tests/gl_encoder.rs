@@ -7,7 +7,7 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodePicFlags,
+        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodePicFlags, EncodeQpMapMode,
         EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderGL, NvEncoderParams,
         NvEncoderSettings,
     },
@@ -65,6 +65,7 @@ fn util_create_encoder(encoder: &mut NvEncoderGL) -> Result<()> {
             enable_aq: true,
             ..Default::default()
         },
+        qp_map_mode: EncodeQpMapMode::Disabled,
     };
 
     encoder.create_encoder(params)?;
@@ -101,7 +102,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     upload_nv12_data_to_texture_resource(data, resource, width, height);
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None)?;
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
@@ -136,7 +137,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         let start_time = Instant::now();
         let resource = encoder.get_next_input_resource();
         upload_nv12_data_to_texture_resource(data, resource, width, height);
-        encoder.encode_frame(&mut packet, pic_flags)?;
+        encoder.encode_frame(&mut packet, pic_flags, None)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

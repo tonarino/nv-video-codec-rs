@@ -9,7 +9,7 @@ use nv_video_codec::{
     encoder::{
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
-        EncodeMultiPass, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
+        EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode,
         EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
@@ -60,6 +60,7 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
             multi_pass: EncodeMultiPass::TwoPassFullResolution,
             ..Default::default()
         },
+        qp_map_mode: EncodeQpMapMode::Disabled,
     };
 
     encoder.create_encoder(params)?;
@@ -97,7 +98,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     // TODO: Copy data to resource
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None)?;
     assert_eq!(packet.len(), 1);
 
     encoder.end_encode(&mut packet)?;
@@ -149,7 +150,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         } else {
             EncodePicFlags::empty()
         };
-        encoder.encode_frame(&mut packet, pic_flags)?;
+        encoder.encode_frame(&mut packet, pic_flags, None)?;
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {

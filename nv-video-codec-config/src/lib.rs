@@ -69,6 +69,37 @@ pub enum EncodeTuningInfo {
     Lossless,
 }
 
+/// Controls how a per-block quality map is applied when encoding a frame.
+///
+/// This overrides the encoder's per-block Quantization Parameter (QP)
+/// — determining how aggressively a block is compressed.
+/// Lower QP means higher quality; higher QP means lower quality.
+///
+/// The map is a flat array of one `i8` per block:
+/// - H.264: 16×16 pixels
+/// - HEVC: 32×32 or 64×64 pixels
+///
+/// See the NVENC SDK docs for `NV_ENC_QP_MAP_MODE`.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+pub enum EncodeQpMapMode {
+    /// Quality map is ignored.
+    #[default]
+    Disabled,
+    /// Each value is an emphasis level. The encoder maps the level to
+    /// a relative QP modifier internally.
+    ///
+    /// Only supported for H.264.
+    Emphasis,
+    /// Each value is a signed QP delta in the range -128 to 127
+    /// applied on top of the rate-control-chosen QP for that block.
+    /// Negative values increase quality; positive values decrease it.
+    ///
+    /// Supported for both H.264 and HEVC.
+    Delta,
+}
+
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -93,4 +124,5 @@ pub struct NvEncoderParams {
     pub frame_rate_denominator: u32,
     pub repeat_spspps: bool,
     pub rate_control: EncodeRateControl,
+    pub qp_map_mode: EncodeQpMapMode,
 }
