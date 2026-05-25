@@ -371,11 +371,12 @@ where
 
         unsafe {
             self.nv_encode_api_function_list
-                .nvEncGetEncodePresetConfig
-                .expect("Invalid nvEncGetEncodePresetConfig ptr")(
+                .nvEncGetEncodePresetConfigEx
+                .expect("Invalid nvEncGetEncodePresetConfigEx ptr")(
                 self.encoder_handle as *mut _,
                 params.codec.into_guid(),
                 params.preset.into_guid(),
+                params.tuning_info.into_ffi(),
                 &mut preset_config,
             )
             .into_nvenc_result()?;
