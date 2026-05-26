@@ -231,6 +231,9 @@ where
         &mut self,
         packet: &mut Vec<&[u8]>,
         pic_flags: EncodePicFlags,
+        // Per-block quality values. See `EncodeQpMapMode` for interpretation.
+        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
+        qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -244,6 +247,7 @@ where
             self.mapped_input_buffers[buffer_index as usize],
             self.bitstream_output_buffer[buffer_index as usize],
             pic_flags,
+            qp_delta_map,
         );
 
         match encode_status {
@@ -763,6 +767,9 @@ where
         input_buffer: NV_ENC_INPUT_PTR,
         output_buffer: NV_ENC_OUTPUT_PTR,
         pic_flags: EncodePicFlags,
+        // Per-block quality values. See `EncodeQpMapMode` for interpretation.
+        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
+        qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -778,6 +785,8 @@ where
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
             encodePicFlags: pic_flags.bits(),
+            qpDeltaMap: qp_delta_map.map_or(std::ptr::null::<i8>(), |m| m.as_ptr()) as *mut _,
+            qpDeltaMapSize: qp_delta_map.map_or(0, |m| m.len() as u32),
             ..Default::default()
         };
 

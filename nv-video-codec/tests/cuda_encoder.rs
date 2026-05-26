@@ -9,7 +9,7 @@ use nv_video_codec::{
     encoder::{
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
-        EncodeMultiPass, EncodePicFlags, EncodeRateControl, EncodeRateControlMode,
+        EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode,
         EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
@@ -60,6 +60,7 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
             multi_pass: EncodeMultiPass::TwoPassFullResolution,
             ..Default::default()
         },
+        qp_map_mode: EncodeQpMapMode::Disabled,
     };
 
     encoder.create_encoder(params)?;
@@ -97,7 +98,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     // TODO: Copy data to resource
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty())?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None)?;
     assert_eq!(packet.len(), 1);
 
     encoder.end_encode(&mut packet)?;
@@ -149,7 +150,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         } else {
             EncodePicFlags::empty()
         };
-        encoder.encode_frame(&mut packet, pic_flags)?;
+        encoder.encode_frame(&mut packet, pic_flags, None)?;
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {
@@ -183,6 +184,89 @@ fn encode_multi_frame_3k() -> Result<()> {
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
+
+    Ok(())
+}
+
+#[test]
+fn encode_qp_map_disabled() -> Result<()> {
+    let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    util_create_encoder(&mut encoder)?;
+
+    let mut packet = Vec::new();
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]))?;
+    assert_eq!(packet.len(), 1);
+
+    Ok(())
+}
+
+fn util_create_encoder_with(
+    encoder: &mut NvEncoderCuda,
+    codec: EncodeCodec,
+    qp_map_mode: EncodeQpMapMode,
+) -> Result<()> {
+    encoder.create_encoder(NvEncoderParams {
+        codec,
+        preset: EncodePreset::P3,
+        tuning_info: EncodeTuningInfo::UltraLowLatency,
+        frame_rate_numerator: 60,
+        frame_rate_denominator: 1,
+        repeat_spspps: true,
+        rate_control: EncodeRateControl {
+            mode: EncodeRateControlMode::ConstantBitrate,
+            low_delay_key_frame_scale: 1,
+            bit_rate: 16_000_000,
+            enable_aq: true,
+            multi_pass: EncodeMultiPass::TwoPassFullResolution,
+            ..Default::default()
+        },
+        qp_map_mode,
+    })?;
+    Ok(())
+}
+
+#[test]
+fn encode_qp_map_delta_hevc() -> Result<()> {
+    let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    util_create_encoder_with(&mut encoder, EncodeCodec::Hevc, EncodeQpMapMode::Delta)?;
+
+    let mut packet = Vec::new();
+
+    // Correct size for 32×32 CTBs: ceil(1280/32) * ceil(720/32) = 920.
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 920]))?;
+    assert_eq!(packet.len(), 1);
+
+    // Non-zero deltas are accepted.
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![5i8; 920]))?;
+    assert_eq!(packet.len(), 1);
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![-5i8; 920]))?;
+    assert_eq!(packet.len(), 1);
+
+    // Wrong size is rejected (too small).
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 100]));
+    assert!(result.is_err());
+
+    // Wrong size assuming 64×64 CTBs: ceil(1280/64) * ceil(720/64) = 240.
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 240]));
+    assert!(result.is_err());
+
+    Ok(())
+}
+
+#[test]
+fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
+    let mut encoder = util_init_encoder(200, 200, BufferFormat::NV12)?;
+    util_create_encoder_with(&mut encoder, EncodeCodec::Hevc, EncodeQpMapMode::Delta)?;
+
+    let mut packet = Vec::new();
+
+    // ceil(200/32) * ceil(200/32) = 7 * 7 = 49.
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 49]))?;
+    assert_eq!(packet.len(), 1);
+
+    // Wrong size is still rejected.
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 16]));
+    assert!(result.is_err());
 
     Ok(())
 }
