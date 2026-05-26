@@ -78,7 +78,7 @@ pub enum EncodeTuningInfo {
 /// The map can be provided in the optional `qp_delta_map` argument of `NvEncoder::encode_frame()`.
 /// It is a flat array of one `i8` per block:
 /// - H.264: 16×16 pixels
-/// - HEVC: 32×32 or 64×64 pixels
+/// - HEVC: 32×32 pixels
 ///
 /// See the NVENC SDK docs for `NV_ENC_QP_MAP_MODE`.
 #[derive(

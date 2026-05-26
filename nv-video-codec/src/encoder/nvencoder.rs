@@ -232,7 +232,7 @@ where
         packet: &mut Vec<&[u8]>,
         pic_flags: EncodePicFlags,
         // Per-block quality values. See `EncodeQpMapMode` for interpretation.
-        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32/64×64 block (HEVC).
+        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
         qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         packet.clear();
@@ -767,7 +767,7 @@ where
         output_buffer: NV_ENC_OUTPUT_PTR,
         pic_flags: EncodePicFlags,
         // Per-block quality values. See `EncodeQpMapMode` for interpretation.
-        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32/64×64 block (HEVC).
+        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
         qp_delta_map: Option<&[i8]>,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
