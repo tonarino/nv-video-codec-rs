@@ -85,7 +85,7 @@ pub enum EncodeTuningInfo {
     Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
 pub enum EncodeQpMapMode {
-    /// Quality map is ignored.
+    /// Quality map is ignored; passing `Some(...)` to `qp_delta_map` is safe but has no effect.
     #[default]
     Disabled,
     /// Each value is an emphasis level. The encoder maps the level to
