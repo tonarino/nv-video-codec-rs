@@ -1,7 +1,7 @@
 use super::nvencoder::{NV_ENC_CONFIG_VER, NV_ENC_PRESET_CONFIG_VER};
 use crate::guids::{EncodeProfile, IntoGuid as _};
 use nv_video_codec_sys::{
-    NV_ENC_CONFIG, NV_ENC_PARAMS_FRAME_FIELD_MODE, NV_ENC_PRESET_CONFIG, _NV_ENC_MV_PRECISION,
+    _NV_ENC_MV_PRECISION, NV_ENC_CONFIG, NV_ENC_PARAMS_FRAME_FIELD_MODE, NV_ENC_PRESET_CONFIG,
 };
 
 pub trait CustomDefault {

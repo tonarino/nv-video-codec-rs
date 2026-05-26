@@ -4,7 +4,7 @@ use super::{
 };
 use crate::encoder::nvencoder::{Input, NvEncInputFrame, NvEncoderSettings};
 use nv_video_codec_sys::{
-    NV_ENC_INPUT_RESOURCE_OPENGL_TEX, _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
+    _NV_ENC_DEVICE_TYPE, _NV_ENC_INPUT_RESOURCE_OPENGL_TEX, NV_ENC_INPUT_RESOURCE_OPENGL_TEX,
 };
 use std::ops::{Deref, DerefMut};
 
