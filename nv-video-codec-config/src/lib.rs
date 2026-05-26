@@ -75,7 +75,8 @@ pub enum EncodeTuningInfo {
 /// — determining how aggressively a block is compressed.
 /// Lower QP means higher quality; higher QP means lower quality.
 ///
-/// The map is a flat array of one `i8` per block:
+/// The map can be provided in the optional `qp_delta_map` argument of `NvEncoder::encode_frame()`.
+/// It is a flat array of one `i8` per block:
 /// - H.264: 16×16 pixels
 /// - HEVC: 32×32 or 64×64 pixels
 ///
