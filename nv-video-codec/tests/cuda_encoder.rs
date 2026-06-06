@@ -6,6 +6,9 @@ extern crate simple_logger;
 use anyhow::Result;
 use cudarc::driver::{sys::CUctx_flags, CudaContext};
 use nv_video_codec::{
+    decoder::{
+        frame::host::HostFrameAllocator, types::Codec, DecoderPacketFlags, NvDecoderBuilder,
+    },
     encoder::{
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
@@ -235,21 +238,51 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let mut packet = Vec::new();
 
     // Correct size for 32×32 CTBs: ceil(1280/32) * ceil(720/32) = 920.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 920]), None, None)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![0i8; 920]),
+        None,
+        None,
+    )?;
     assert_eq!(packet.len(), 1);
 
     // Non-zero deltas are accepted.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![5i8; 920]), None, None)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![5i8; 920]),
+        None,
+        None,
+    )?;
     assert_eq!(packet.len(), 1);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![-5i8; 920]), None, None)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![-5i8; 920]),
+        None,
+        None,
+    )?;
     assert_eq!(packet.len(), 1);
 
     // Wrong size is rejected (too small).
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 100]), None, None);
+    let result = encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![0i8; 100]),
+        None,
+        None,
+    );
     assert!(result.is_err());
 
     // Wrong size assuming 64×64 CTBs: ceil(1280/64) * ceil(720/64) = 240.
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 240]), None, None);
+    let result = encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![0i8; 240]),
+        None,
+        None,
+    );
     assert!(result.is_err());
 
     Ok(())
@@ -267,8 +300,106 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     assert_eq!(packet.len(), 1);
 
     // Wrong size is still rejected.
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 16]), None, None);
+    let result = encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![0i8; 16]),
+        None,
+        None,
+    );
     assert!(result.is_err());
 
+    Ok(())
+}
+
+fn util_create_encoder_ltr(
+    encoder: &mut NvEncoderCuda,
+    enable_ltr: bool,
+    ltr_num_frames: u32,
+    ltr_trust_mode: u32,
+) -> Result<()> {
+    encoder.create_encoder(NvEncoderParams {
+        codec: EncodeCodec::Hevc,
+        preset: EncodePreset::P3,
+        tuning_info: EncodeTuningInfo::UltraLowLatency,
+        frame_rate_numerator: 60,
+        frame_rate_denominator: 1,
+        repeat_spspps: true,
+        rate_control: EncodeRateControl {
+            mode: EncodeRateControlMode::ConstantBitrate,
+            low_delay_key_frame_scale: 1,
+            bit_rate: 16_000_000,
+            enable_aq: true,
+            multi_pass: EncodeMultiPass::TwoPassFullResolution,
+            ..Default::default()
+        },
+        qp_map_mode: EncodeQpMapMode::Disabled,
+        enable_ltr,
+        ltr_num_frames,
+        ltr_trust_mode,
+    })?;
+    Ok(())
+}
+
+#[test]
+fn encode_ltr_round_trip() -> Result<()> {
+    let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    util_create_encoder_ltr(&mut encoder, true, 4, 0)?;
+
+    let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
+    let (w, h) = (1280, 720);
+    let mut packet = Vec::new();
+    let mut bitstream: Vec<Vec<u8>> = Vec::new();
+
+    // Frame 0: IDR + mark index 0 as LTR
+    upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER,
+        None,
+        Some(0),
+        None,
+    )?;
+    bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
+    // Frames 1-3: use index 0 as LTR
+    for _ in 0..3 {
+        upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
+        encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(1))?;
+        bitstream.extend(packet.iter().map(|p| p.to_vec()));
+    }
+
+    // Frame 4: mark index 1 as LTR, use both LTR 0+1
+    upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, Some(1), Some(0b11))?;
+    bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
+    // Frame 5: use index 1 as LTR
+    upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(0b10))?;
+    bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
+    encoder.end_encode(&mut packet)?;
+    bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
+    // Decode the LTR-encoded bitstream.
+    let context = init_cuda_ctx()?;
+    let mut decoder = NvDecoderBuilder::new(context, Codec::HEVC)
+        .low_latency(true)
+        .build::<HostFrameAllocator>()?;
+
+    let mut decoded = 0;
+    for (i, frame_data) in bitstream.iter().enumerate() {
+        if frame_data.is_empty() {
+            continue;
+        }
+        let output = decoder.decode_one(frame_data, DecoderPacketFlags::empty(), i as i64)?;
+        if output.frames.is_some() {
+            decoded += 1;
+        }
+    }
+
+    // Check we decoded at least one frame.
+    assert!(decoded > 0, "no frames decoded from LTR bitstream");
     Ok(())
 }
