@@ -12,6 +12,7 @@ use crate::{
     guids::{EncodeCodec, IntoGuid as _},
 };
 use nv_video_codec_sys::{
+    guids::{NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID},
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
     _NV_ENC_RECONFIGURE_PARAMS, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
     NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
@@ -234,6 +235,10 @@ where
         // Per-block quality values. See `EncodeQpMapMode` for interpretation.
         // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
         qp_delta_map: Option<&[i8]>,
+        // Long-term reference (LTR) frame index to mark this frame as LTR.
+        ltr_mark_frame_idx: Option<u32>,
+        // Bitmap of LTR frame indices to use as reference for this frame.
+        ltr_use_frame_bitmap: Option<u32>,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -248,6 +253,8 @@ where
             self.bitstream_output_buffer[buffer_index as usize],
             pic_flags,
             qp_delta_map,
+            ltr_mark_frame_idx,
+            ltr_use_frame_bitmap,
         );
 
         match encode_status {
@@ -770,6 +777,10 @@ where
         // Per-block quality values. See `EncodeQpMapMode` for interpretation.
         // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
         qp_delta_map: Option<&[i8]>,
+        // Long-term reference (LTR) frame index to mark this frame as LTR.
+        ltr_mark_frame_idx: Option<u32>,
+        // Bitmap of LTR frame indices to use as reference for this frame.
+        ltr_use_frame_bitmap: Option<u32>,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -789,6 +800,34 @@ where
             qpDeltaMapSize: qp_delta_map.map_or(0, |m| m.len() as u32),
             ..Default::default()
         };
+
+        if ltr_mark_frame_idx.is_some() || ltr_use_frame_bitmap.is_some() {
+            match self.initialize_params.encodeGUID {
+                g if g == NV_ENC_CODEC_H264_GUID => unsafe {
+                    let h264 = &mut pic_params.codecPicParams.h264PicParams;
+                    if let Some(idx) = ltr_mark_frame_idx {
+                        h264.set_ltrMarkFrame(1);
+                        h264.ltrMarkFrameIdx = idx;
+                    }
+                    if let Some(bitmap) = ltr_use_frame_bitmap {
+                        h264.set_ltrUseFrames(1);
+                        h264.ltrUseFrameBitmap = bitmap;
+                    }
+                },
+                g if g == NV_ENC_CODEC_HEVC_GUID => unsafe {
+                    let hevc = &mut pic_params.codecPicParams.hevcPicParams;
+                    if let Some(idx) = ltr_mark_frame_idx {
+                        hevc.set_ltrMarkFrame(1);
+                        hevc.ltrMarkFrameIdx = idx;
+                    }
+                    if let Some(bitmap) = ltr_use_frame_bitmap {
+                        hevc.set_ltrUseFrames(1);
+                        hevc.ltrUseFrameBitmap = bitmap;
+                    }
+                },
+                _ => {},
+            }
+        }
 
         unsafe {
             self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
@@ -879,6 +918,23 @@ where
             self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
                 self.encoder_handle as *mut _,
                 &mut pic_params,
+            )
+            .into_nvenc_result()?;
+        }
+        Ok(())
+    }
+
+    /// Invalidate a corrupted reference frame and any dependent frames in the prediction chain.
+    ///
+    /// Typically called on sustained packet loss or decoder reinitialization.
+    pub fn invalidate_ref_frames(&mut self, timestamp: u64) -> NvEncoderResult<()> {
+        if self.encoder_handle.is_null() {
+            return Err(NvEncError::EncoderNotInitialized.into());
+        }
+        unsafe {
+            self.nv_encode_api_function_list.nvEncInvalidateRefFrames.unwrap()(
+                self.encoder_handle as *mut _,
+                timestamp,
             )
             .into_nvenc_result()?;
         }

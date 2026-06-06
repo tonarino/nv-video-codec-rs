@@ -61,6 +61,7 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
             ..Default::default()
         },
         qp_map_mode: EncodeQpMapMode::Disabled,
+        ..Default::default()
     };
 
     encoder.create_encoder(params)?;
@@ -98,7 +99,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     // TODO: Copy data to resource
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None)?;
     assert_eq!(packet.len(), 1);
 
     encoder.end_encode(&mut packet)?;
@@ -150,7 +151,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         } else {
             EncodePicFlags::empty()
         };
-        encoder.encode_frame(&mut packet, pic_flags, None)?;
+        encoder.encode_frame(&mut packet, pic_flags, None, None, None)?;
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {
@@ -194,7 +195,7 @@ fn encode_qp_map_disabled() -> Result<()> {
     util_create_encoder(&mut encoder)?;
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]), None, None)?;
     assert_eq!(packet.len(), 1);
 
     Ok(())
@@ -221,6 +222,7 @@ fn util_create_encoder_with(
             ..Default::default()
         },
         qp_map_mode,
+        ..Default::default()
     })?;
     Ok(())
 }
@@ -233,21 +235,21 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let mut packet = Vec::new();
 
     // Correct size for 32×32 CTBs: ceil(1280/32) * ceil(720/32) = 920.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 920]))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 920]), None, None)?;
     assert_eq!(packet.len(), 1);
 
     // Non-zero deltas are accepted.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![5i8; 920]))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![5i8; 920]), None, None)?;
     assert_eq!(packet.len(), 1);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![-5i8; 920]))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![-5i8; 920]), None, None)?;
     assert_eq!(packet.len(), 1);
 
     // Wrong size is rejected (too small).
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 100]));
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 100]), None, None);
     assert!(result.is_err());
 
     // Wrong size assuming 64×64 CTBs: ceil(1280/64) * ceil(720/64) = 240.
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 240]));
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 240]), None, None);
     assert!(result.is_err());
 
     Ok(())
@@ -261,11 +263,11 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     let mut packet = Vec::new();
 
     // ceil(200/32) * ceil(200/32) = 7 * 7 = 49.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 49]))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 49]), None, None)?;
     assert_eq!(packet.len(), 1);
 
     // Wrong size is still rejected.
-    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 16]));
+    let result = encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 16]), None, None);
     assert!(result.is_err());
 
     Ok(())

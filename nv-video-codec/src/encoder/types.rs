@@ -195,20 +195,26 @@ pub(crate) fn apply_params_to_encode_config(
 
     match params.codec {
         EncodeCodec::H264 =>
-        // SAFETY: We checked the codec is H264, so we can access the union field.
         unsafe {
-            encode_config
-                .encodeCodecConfig
-                .h264Config
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
+            let h264 = &mut encode_config.encodeCodecConfig.h264Config;
+            h264.set_repeatSPSPPS(params.repeat_spspps as u32);
+            if params.enable_ltr {
+                h264.set_enableLTR(1);
+                h264.ltrNumFrames = params.ltr_num_frames;
+                // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
+                h264.ltrTrustMode = params.ltr_trust_mode;
+            }
         },
         EncodeCodec::Hevc =>
-        // SAFETY: We checked the codec is HEVC, so we can access the union field.
         unsafe {
-            encode_config
-                .encodeCodecConfig
-                .hevcConfig
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
+            let hevc = &mut encode_config.encodeCodecConfig.hevcConfig;
+            hevc.set_repeatSPSPPS(params.repeat_spspps as u32);
+            if params.enable_ltr {
+                hevc.set_enableLTR(1);
+                hevc.ltrNumFrames = params.ltr_num_frames;
+                // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
+                hevc.ltrTrustMode = params.ltr_trust_mode;
+            }
         },
     }
 }
