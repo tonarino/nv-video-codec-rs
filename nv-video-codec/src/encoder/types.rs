@@ -194,8 +194,7 @@ pub(crate) fn apply_params_to_encode_config(
     encode_config.rcParams.qpMapMode = params.qp_map_mode.into_ffi();
 
     match params.codec {
-        EncodeCodec::H264 =>
-        unsafe {
+        EncodeCodec::H264 => unsafe {
             let h264 = &mut encode_config.encodeCodecConfig.h264Config;
             h264.set_repeatSPSPPS(params.repeat_spspps as u32);
             if params.ltr_num_frames > 0 {
@@ -205,8 +204,7 @@ pub(crate) fn apply_params_to_encode_config(
                 h264.ltrTrustMode = params.ltr_trust_mode;
             }
         },
-        EncodeCodec::Hevc =>
-        unsafe {
+        EncodeCodec::Hevc => unsafe {
             let hevc = &mut encode_config.encodeCodecConfig.hevcConfig;
             hevc.set_repeatSPSPPS(params.repeat_spspps as u32);
             if params.ltr_num_frames > 0 {
