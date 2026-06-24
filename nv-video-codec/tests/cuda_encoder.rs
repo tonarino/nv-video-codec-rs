@@ -102,7 +102,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     // TODO: Copy data to resource
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None, 0)?;
     assert_eq!(packet.len(), 1);
 
     encoder.end_encode(&mut packet)?;
@@ -154,7 +154,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         } else {
             EncodePicFlags::empty()
         };
-        encoder.encode_frame(&mut packet, pic_flags, None, None, None)?;
+        encoder.encode_frame(&mut packet, pic_flags, None, None, None, 0)?;
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {
@@ -198,7 +198,7 @@ fn encode_qp_map_disabled() -> Result<()> {
     util_create_encoder(&mut encoder)?;
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]), None, None)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]), None, None, 0)?;
     assert_eq!(packet.len(), 1);
 
     Ok(())
@@ -244,6 +244,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
         Some(&vec![0i8; 920]),
         None,
         None,
+        0,
     )?;
     assert_eq!(packet.len(), 1);
 
@@ -254,6 +255,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
         Some(&vec![5i8; 920]),
         None,
         None,
+        0,
     )?;
     assert_eq!(packet.len(), 1);
     encoder.encode_frame(
@@ -262,6 +264,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
         Some(&vec![-5i8; 920]),
         None,
         None,
+        0,
     )?;
     assert_eq!(packet.len(), 1);
 
@@ -272,6 +275,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
         Some(&vec![0i8; 100]),
         None,
         None,
+        0,
     );
     assert!(result.is_err());
 
@@ -282,6 +286,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
         Some(&vec![0i8; 240]),
         None,
         None,
+        0,
     );
     assert!(result.is_err());
 
@@ -296,7 +301,14 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     let mut packet = Vec::new();
 
     // ceil(200/32) * ceil(200/32) = 7 * 7 = 49.
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&vec![0i8; 49]), None, None)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        Some(&vec![0i8; 49]),
+        None,
+        None,
+        0,
+    )?;
     assert_eq!(packet.len(), 1);
 
     // Wrong size is still rejected.
@@ -306,6 +318,7 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
         Some(&vec![0i8; 16]),
         None,
         None,
+        0,
     );
     assert!(result.is_err());
 
@@ -357,25 +370,29 @@ fn encode_ltr_round_trip() -> Result<()> {
         None,
         Some(0),
         None,
+        0,
     )?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
 
     // Frames 1-3: use index 0 as LTR
-    for _ in 0..3 {
+    for ts in 1..=3 {
         upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-        encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(1))?;
+        encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(1), ts)?;
         bitstream.extend(packet.iter().map(|p| p.to_vec()));
     }
 
     // Frame 4: mark index 1 as LTR, use both LTR 0+1
     upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, Some(1), Some(0b11))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, Some(1), Some(0b11), 4)?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
 
     // Frame 5: use index 1 as LTR
     upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(0b10))?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(0b10), 5)?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
+    // Verify invalidate_ref_frames doesn't error.
+    encoder.invalidate_ref_frames(0)?;
 
     encoder.end_encode(&mut packet)?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));

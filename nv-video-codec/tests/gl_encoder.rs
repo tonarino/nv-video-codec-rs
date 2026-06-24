@@ -103,7 +103,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     upload_nv12_data_to_texture_resource(data, resource, width, height);
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None, 0)?;
 
     encoder.end_encode(&mut packet)?;
     assert_eq!(0, packet.len());
@@ -138,7 +138,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         let start_time = Instant::now();
         let resource = encoder.get_next_input_resource();
         upload_nv12_data_to_texture_resource(data, resource, width, height);
-        encoder.encode_frame(&mut packet, pic_flags, None, None, None)?;
+        encoder.encode_frame(&mut packet, pic_flags, None, None, None, 0)?;
 
         frames_encoded += 1;
         total_time += start_time.elapsed();

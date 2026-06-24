@@ -239,6 +239,9 @@ where
         ltr_mark_frame_idx: Option<u32>,
         // Bitmap of LTR frame indices to use as reference for this frame.
         ltr_use_frame_bitmap: Option<u32>,
+        // Opaque identifier for this frame, stored as `inputTimeStamp` in the NVENC pic params.
+        // Used by `invalidate_ref_frames` to identify which frame to drop on packet loss.
+        timestamp: u64,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -255,6 +258,7 @@ where
             qp_delta_map,
             ltr_mark_frame_idx,
             ltr_use_frame_bitmap,
+            timestamp,
         );
 
         match encode_status {
@@ -769,6 +773,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn do_encode(
         &mut self,
         input_buffer: NV_ENC_INPUT_PTR,
@@ -781,6 +786,7 @@ where
         ltr_mark_frame_idx: Option<u32>,
         // Bitmap of LTR frame indices to use as reference for this frame.
         ltr_use_frame_bitmap: Option<u32>,
+        timestamp: u64,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -796,6 +802,7 @@ where
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
             encodePicFlags: pic_flags.bits(),
+            inputTimeStamp: timestamp,
             qpDeltaMap: qp_delta_map.map_or(std::ptr::null::<i8>(), |m| m.as_ptr()) as *mut _,
             qpDeltaMapSize: qp_delta_map.map_or(0, |m| m.len() as u32),
             ..Default::default()
@@ -926,7 +933,9 @@ where
 
     /// Invalidate a corrupted reference frame and any dependent frames in the prediction chain.
     ///
-    /// Typically called on sustained packet loss or decoder reinitialization.
+    /// `timestamp` must match the `timestamp` value passed to `encode_frame` for the frame
+    /// that was lost. Typically called on sustained packet loss or decoder reinitialization,
+    /// not for isolated dropped packets.
     pub fn invalidate_ref_frames(&mut self, timestamp: u64) -> NvEncoderResult<()> {
         if self.encoder_handle.is_null() {
             return Err(NvEncError::EncoderNotInitialized.into());
