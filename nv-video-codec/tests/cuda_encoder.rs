@@ -13,7 +13,7 @@ use nv_video_codec::{
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
         EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode,
-        EncodeTuningInfo, NvEncoderParams, NvEncoderSettings,
+        EncodeTuningInfo, LtrTrustMode, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -41,8 +41,8 @@ fn util_init_encoder(width: u32, height: u32, format: BufferFormat) -> Result<Nv
     Ok(encoder)
 }
 
-fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
-    let params = NvEncoderParams {
+fn common_encoder_params() -> NvEncoderParams {
+    NvEncoderParams {
         codec: EncodeCodec::Hevc,
         // preset guid seems to have no real effect on the speed???
         // needs testing as well
@@ -63,12 +63,12 @@ fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
             multi_pass: EncodeMultiPass::TwoPassFullResolution,
             ..Default::default()
         },
-        qp_map_mode: EncodeQpMapMode::Disabled,
         ..Default::default()
-    };
+    }
+}
 
-    encoder.create_encoder(params)?;
-
+fn util_create_encoder(encoder: &mut NvEncoderCuda) -> Result<()> {
+    encoder.create_encoder(common_encoder_params())?;
     Ok(())
 }
 
@@ -209,24 +209,7 @@ fn util_create_encoder_with(
     codec: EncodeCodec,
     qp_map_mode: EncodeQpMapMode,
 ) -> Result<()> {
-    encoder.create_encoder(NvEncoderParams {
-        codec,
-        preset: EncodePreset::P3,
-        tuning_info: EncodeTuningInfo::UltraLowLatency,
-        frame_rate_numerator: 60,
-        frame_rate_denominator: 1,
-        repeat_spspps: true,
-        rate_control: EncodeRateControl {
-            mode: EncodeRateControlMode::ConstantBitrate,
-            low_delay_key_frame_scale: 1,
-            bit_rate: 16_000_000,
-            enable_aq: true,
-            multi_pass: EncodeMultiPass::TwoPassFullResolution,
-            ..Default::default()
-        },
-        qp_map_mode,
-        ..Default::default()
-    })?;
+    encoder.create_encoder(NvEncoderParams { codec, qp_map_mode, ..common_encoder_params() })?;
     Ok(())
 }
 
@@ -328,26 +311,12 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
 fn util_create_encoder_ltr(
     encoder: &mut NvEncoderCuda,
     ltr_num_frames: u32,
-    ltr_trust_mode: u32,
+    ltr_trust_mode: LtrTrustMode,
 ) -> Result<()> {
     encoder.create_encoder(NvEncoderParams {
-        codec: EncodeCodec::Hevc,
-        preset: EncodePreset::P3,
-        tuning_info: EncodeTuningInfo::UltraLowLatency,
-        frame_rate_numerator: 60,
-        frame_rate_denominator: 1,
-        repeat_spspps: true,
-        rate_control: EncodeRateControl {
-            mode: EncodeRateControlMode::ConstantBitrate,
-            low_delay_key_frame_scale: 1,
-            bit_rate: 16_000_000,
-            enable_aq: true,
-            multi_pass: EncodeMultiPass::TwoPassFullResolution,
-            ..Default::default()
-        },
-        qp_map_mode: EncodeQpMapMode::Disabled,
         ltr_num_frames,
         ltr_trust_mode,
+        ..common_encoder_params()
     })?;
     Ok(())
 }
@@ -355,7 +324,7 @@ fn util_create_encoder_ltr(
 #[test]
 fn encode_ltr_round_trip() -> Result<()> {
     let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
-    util_create_encoder_ltr(&mut encoder, 4, 0)?;
+    util_create_encoder_ltr(&mut encoder, 4, LtrTrustMode::PerPicture)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     let (w, h) = (1280, 720);

@@ -8,7 +8,7 @@ use nv_video_codec_sys::{
 
 pub use nv_video_codec_config::{
     EncodeMultiPass, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo,
-    NvEncoderParams,
+    LtrTrustMode, NvEncoderParams,
 };
 
 ffi_enum! {
@@ -201,8 +201,10 @@ pub(crate) fn apply_params_to_encode_config(
             if params.ltr_num_frames > 0 {
                 h264.set_enableLTR(1);
                 h264.ltrNumFrames = params.ltr_num_frames;
-                // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
-                h264.ltrTrustMode = params.ltr_trust_mode;
+                h264.ltrTrustMode = match params.ltr_trust_mode {
+                    LtrTrustMode::PerPicture => 0,
+                    LtrTrustMode::Trust => 1,
+                };
             }
         },
         // SAFETY: We checked the codec is HEVC, so we can access the union field.
@@ -212,8 +214,10 @@ pub(crate) fn apply_params_to_encode_config(
             if params.ltr_num_frames > 0 {
                 hevc.set_enableLTR(1);
                 hevc.ltrNumFrames = params.ltr_num_frames;
-                // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
-                hevc.ltrTrustMode = params.ltr_trust_mode;
+                hevc.ltrTrustMode = match params.ltr_trust_mode {
+                    LtrTrustMode::PerPicture => 0,
+                    LtrTrustMode::Trust => 1,
+                };
             }
         },
     }

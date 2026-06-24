@@ -114,6 +114,19 @@ pub struct EncodeRateControl {
     pub multi_pass: EncodeMultiPass,
 }
 
+/// Controls how LTR frames are marked.
+///
+/// Per Picture (preferred) — client explicitly marks each LTR frame.
+/// Trust (may be deprecated) — encoder auto-marks the first `ltr_num_frames` frames after IDR.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+pub enum LtrTrustMode {
+    #[default]
+    PerPicture,
+    Trust,
+}
+
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -127,5 +140,5 @@ pub struct NvEncoderParams {
     pub rate_control: EncodeRateControl,
     pub qp_map_mode: EncodeQpMapMode,
     pub ltr_num_frames: u32,
-    pub ltr_trust_mode: u32,
+    pub ltr_trust_mode: LtrTrustMode,
 }
