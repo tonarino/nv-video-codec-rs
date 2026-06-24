@@ -194,6 +194,7 @@ pub(crate) fn apply_params_to_encode_config(
     encode_config.rcParams.qpMapMode = params.qp_map_mode.into_ffi();
 
     match params.codec {
+        // SAFETY: We checked the codec is H264, so we can access the union field.
         EncodeCodec::H264 => unsafe {
             let h264 = &mut encode_config.encodeCodecConfig.h264Config;
             h264.set_repeatSPSPPS(params.repeat_spspps as u32);
@@ -204,6 +205,7 @@ pub(crate) fn apply_params_to_encode_config(
                 h264.ltrTrustMode = params.ltr_trust_mode;
             }
         },
+        // SAFETY: We checked the codec is HEVC, so we can access the union field.
         EncodeCodec::Hevc => unsafe {
             let hevc = &mut encode_config.encodeCodecConfig.hevcConfig;
             hevc.set_repeatSPSPPS(params.repeat_spspps as u32);
