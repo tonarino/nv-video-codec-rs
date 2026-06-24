@@ -126,7 +126,6 @@ pub struct NvEncoderParams {
     pub repeat_spspps: bool,
     pub rate_control: EncodeRateControl,
     pub qp_map_mode: EncodeQpMapMode,
-    pub enable_ltr: bool,
     pub ltr_num_frames: u32,
     pub ltr_trust_mode: u32,
 }

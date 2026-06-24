@@ -314,7 +314,6 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
 
 fn util_create_encoder_ltr(
     encoder: &mut NvEncoderCuda,
-    enable_ltr: bool,
     ltr_num_frames: u32,
     ltr_trust_mode: u32,
 ) -> Result<()> {
@@ -334,7 +333,6 @@ fn util_create_encoder_ltr(
             ..Default::default()
         },
         qp_map_mode: EncodeQpMapMode::Disabled,
-        enable_ltr,
         ltr_num_frames,
         ltr_trust_mode,
     })?;
@@ -344,7 +342,7 @@ fn util_create_encoder_ltr(
 #[test]
 fn encode_ltr_round_trip() -> Result<()> {
     let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
-    util_create_encoder_ltr(&mut encoder, true, 4, 0)?;
+    util_create_encoder_ltr(&mut encoder, 4, 0)?;
 
     let data = include_bytes!("../resources/test/decode_out_grayscale.nv12");
     let (w, h) = (1280, 720);

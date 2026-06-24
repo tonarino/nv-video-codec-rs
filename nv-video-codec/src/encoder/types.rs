@@ -198,7 +198,7 @@ pub(crate) fn apply_params_to_encode_config(
         unsafe {
             let h264 = &mut encode_config.encodeCodecConfig.h264Config;
             h264.set_repeatSPSPPS(params.repeat_spspps as u32);
-            if params.enable_ltr {
+            if params.ltr_num_frames > 0 {
                 h264.set_enableLTR(1);
                 h264.ltrNumFrames = params.ltr_num_frames;
                 // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
@@ -209,7 +209,7 @@ pub(crate) fn apply_params_to_encode_config(
         unsafe {
             let hevc = &mut encode_config.encodeCodecConfig.hevcConfig;
             hevc.set_repeatSPSPPS(params.repeat_spspps as u32);
-            if params.enable_ltr {
+            if params.ltr_num_frames > 0 {
                 hevc.set_enableLTR(1);
                 hevc.ltrNumFrames = params.ltr_num_frames;
                 // 0 = Per Picture mode (preferred), 1 = Trust mode (discouraged)
