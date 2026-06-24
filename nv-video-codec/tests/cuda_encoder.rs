@@ -12,8 +12,8 @@ use nv_video_codec::{
     encoder::{
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
-        EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode,
-        EncodeTuningInfo, LtrTrustMode, NvEncoderParams, NvEncoderSettings,
+        EncodeFrameFeatures, EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl,
+        EncodeRateControlMode, EncodeTuningInfo, LtrTrustMode, NvEncoderParams, NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -102,7 +102,7 @@ fn encode_single_frame_grayscale() -> Result<()> {
     // TODO: Copy data to resource
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, None, 0)?;
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Default::default(), 0)?;
     assert_eq!(packet.len(), 1);
 
     encoder.end_encode(&mut packet)?;
@@ -154,7 +154,7 @@ fn encode_multi_frame_3k() -> Result<()> {
         } else {
             EncodePicFlags::empty()
         };
-        encoder.encode_frame(&mut packet, pic_flags, None, None, None, 0)?;
+        encoder.encode_frame(&mut packet, pic_flags, Default::default(), 0)?;
         assert_eq!(packet.len(), 1);
 
         if !packet.is_empty() {
@@ -198,7 +198,12 @@ fn encode_qp_map_disabled() -> Result<()> {
     util_create_encoder(&mut encoder)?;
 
     let mut packet = Vec::new();
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Some(&[0i8; 100]), None, None, 0)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 100]), ..Default::default() },
+        0,
+    )?;
     assert_eq!(packet.len(), 1);
 
     Ok(())
@@ -224,9 +229,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![0i8; 920]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -235,18 +238,14 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![5i8; 920]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![5i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![-5i8; 920]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![-5i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -255,9 +254,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![0i8; 100]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 100]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
@@ -266,9 +263,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![0i8; 240]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 240]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
@@ -287,9 +282,7 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![0i8; 49]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 49]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -298,9 +291,7 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        Some(&vec![0i8; 16]),
-        None,
-        None,
+        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 16]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
@@ -336,9 +327,7 @@ fn encode_ltr_round_trip() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::FORCE_IDR | EncodePicFlags::SEQUENCE_HEADER,
-        None,
-        Some(0),
-        None,
+        EncodeFrameFeatures { ltr_mark_frame_idx: Some(0), ..Default::default() },
         0,
     )?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
@@ -346,18 +335,37 @@ fn encode_ltr_round_trip() -> Result<()> {
     // Frames 1-3: use index 0 as LTR
     for ts in 1..=3 {
         upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-        encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(1), ts)?;
+        encoder.encode_frame(
+            &mut packet,
+            EncodePicFlags::empty(),
+            EncodeFrameFeatures { ltr_use_frame_bitmap: Some(1), ..Default::default() },
+            ts,
+        )?;
         bitstream.extend(packet.iter().map(|p| p.to_vec()));
     }
 
     // Frame 4: mark index 1 as LTR, use both LTR 0+1
     upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, Some(1), Some(0b11), 4)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        EncodeFrameFeatures {
+            ltr_mark_frame_idx: Some(1),
+            ltr_use_frame_bitmap: Some(0b11),
+            ..Default::default()
+        },
+        4,
+    )?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
 
     // Frame 5: use index 1 as LTR
     upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
-    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), None, None, Some(0b10), 5)?;
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        EncodeFrameFeatures { ltr_use_frame_bitmap: Some(0b10), ..Default::default() },
+        5,
+    )?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
 
     // Verify invalidate_ref_frames doesn't error.

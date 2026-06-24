@@ -99,6 +99,18 @@ impl BufferFormat {
     }
 }
 
+/// Per-frame optional features for [`NvEncoder::encode_frame`].
+#[derive(Debug, Default, Clone)]
+pub struct EncodeFrameFeatures<'a> {
+    /// Per-block quality values. See [`EncodeQpMapMode`](nv_video_codec_config::EncodeQpMapMode).
+    /// Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
+    pub qp_delta_map: Option<&'a [i8]>,
+    /// LTR frame index to mark this frame as a long-term reference.
+    pub ltr_mark_frame_idx: Option<u32>,
+    /// Bitmap of LTR frame indices to use as reference for this frame.
+    pub ltr_use_frame_bitmap: Option<u32>,
+}
+
 bitflags! {
     pub struct EncodePicFlags: u32 {
         /// Encode the current picture as an Intra picture.
