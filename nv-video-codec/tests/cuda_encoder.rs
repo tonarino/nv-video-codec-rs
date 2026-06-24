@@ -10,6 +10,7 @@ use nv_video_codec::{
         frame::host::HostFrameAllocator, types::Codec, DecoderPacketFlags, NvDecoderBuilder,
     },
     encoder::{
+        ltr_use_frames,
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
         EncodeFrameFeatures, EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl,
@@ -338,7 +339,10 @@ fn encode_ltr_round_trip() -> Result<()> {
         encoder.encode_frame(
             &mut packet,
             EncodePicFlags::empty(),
-            EncodeFrameFeatures { ltr_use_frame_bitmap: Some(1), ..Default::default() },
+            EncodeFrameFeatures {
+                ltr_use_frame_bitmap: Some(ltr_use_frames(&[0])),
+                ..Default::default()
+            },
             ts,
         )?;
         bitstream.extend(packet.iter().map(|p| p.to_vec()));
@@ -351,7 +355,7 @@ fn encode_ltr_round_trip() -> Result<()> {
         EncodePicFlags::empty(),
         EncodeFrameFeatures {
             ltr_mark_frame_idx: Some(1),
-            ltr_use_frame_bitmap: Some(0b11),
+            ltr_use_frame_bitmap: Some(ltr_use_frames(&[0, 1])),
             ..Default::default()
         },
         4,
@@ -363,7 +367,10 @@ fn encode_ltr_round_trip() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { ltr_use_frame_bitmap: Some(0b10), ..Default::default() },
+        EncodeFrameFeatures {
+            ltr_use_frame_bitmap: Some(ltr_use_frames(&[1])),
+            ..Default::default()
+        },
         5,
     )?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));

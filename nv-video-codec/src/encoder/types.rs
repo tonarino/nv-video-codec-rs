@@ -99,6 +99,13 @@ impl BufferFormat {
     }
 }
 
+/// Bitmap of LTR frame indices to use as reference for an encoded frame.
+pub type LtrUseFrames = u32;
+
+pub fn ltr_use_frames(indices: &[u32]) -> LtrUseFrames {
+    indices.iter().map(|&i| 1u32 << i).sum()
+}
+
 /// Per-frame optional features for [`NvEncoder::encode_frame`].
 #[derive(Debug, Default, Clone)]
 pub struct EncodeFrameFeatures<'a> {
@@ -108,7 +115,7 @@ pub struct EncodeFrameFeatures<'a> {
     /// LTR frame index to mark this frame as a long-term reference.
     pub ltr_mark_frame_idx: Option<u32>,
     /// Bitmap of LTR frame indices to use as reference for this frame.
-    pub ltr_use_frame_bitmap: Option<u32>,
+    pub ltr_use_frame_bitmap: Option<LtrUseFrames>,
 }
 
 bitflags! {
