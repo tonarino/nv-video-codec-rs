@@ -7,9 +7,9 @@ use anyhow::Result;
 use glutin::{event_loop::EventLoop, platform::unix::EventLoopExtUnix, Context, PossiblyCurrent};
 use nv_video_codec::{
     encoder::{
-        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodeFrameFeatures,
-        EncodePicFlags, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode,
-        EncodeTuningInfo, NvEncoderGL, NvEncoderParams, NvEncoderSettings,
+        types::BufferFormat, upload_nv12_data_to_texture_resource, EncodePicFlags, EncodeQpMapMode,
+        EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo, NvEncoderGL, NvEncoderParams,
+        NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };

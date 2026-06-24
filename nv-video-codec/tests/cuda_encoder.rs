@@ -10,11 +10,11 @@ use nv_video_codec::{
         frame::host::HostFrameAllocator, types::Codec, DecoderPacketFlags, NvDecoderBuilder,
     },
     encoder::{
-        ltr_use_frames,
         nvencodercuda::{upload_nv12_data_to_cuda_resource, NvEncoderCuda},
         types::BufferFormat,
         EncodeFrameFeatures, EncodeMultiPass, EncodePicFlags, EncodeQpMapMode, EncodeRateControl,
-        EncodeRateControlMode, EncodeTuningInfo, LtrTrustMode, NvEncoderParams, NvEncoderSettings,
+        EncodeRateControlMode, EncodeTuningInfo, LtrTrustMode, LtrUseFrames, NvEncoderParams,
+        NvEncoderSettings,
     },
     guids::{EncodeCodec, EncodePreset},
 };
@@ -340,7 +340,7 @@ fn encode_ltr_round_trip() -> Result<()> {
             &mut packet,
             EncodePicFlags::empty(),
             EncodeFrameFeatures {
-                ltr_use_frame_bitmap: Some(ltr_use_frames(&[0])),
+                ltr_use_frame_bitmap: Some(LtrUseFrames::from_indices(&[0])),
                 ..Default::default()
             },
             ts,
@@ -355,7 +355,7 @@ fn encode_ltr_round_trip() -> Result<()> {
         EncodePicFlags::empty(),
         EncodeFrameFeatures {
             ltr_mark_frame_idx: Some(1),
-            ltr_use_frame_bitmap: Some(ltr_use_frames(&[0, 1])),
+            ltr_use_frame_bitmap: Some(LtrUseFrames::from_indices(&[0, 1])),
             ..Default::default()
         },
         4,
@@ -368,7 +368,7 @@ fn encode_ltr_round_trip() -> Result<()> {
         &mut packet,
         EncodePicFlags::empty(),
         EncodeFrameFeatures {
-            ltr_use_frame_bitmap: Some(ltr_use_frames(&[1])),
+            ltr_use_frame_bitmap: Some(LtrUseFrames::from_indices(&[1])),
             ..Default::default()
         },
         5,

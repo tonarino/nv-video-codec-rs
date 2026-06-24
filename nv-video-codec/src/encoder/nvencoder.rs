@@ -805,7 +805,7 @@ where
                     }
                     if let Some(bitmap) = features.ltr_use_frame_bitmap {
                         h264.set_ltrUseFrames(1);
-                        h264.ltrUseFrameBitmap = bitmap;
+                        h264.ltrUseFrameBitmap = bitmap.0;
                     }
                 },
                 g if g == NV_ENC_CODEC_HEVC_GUID => unsafe {
@@ -816,7 +816,7 @@ where
                     }
                     if let Some(bitmap) = features.ltr_use_frame_bitmap {
                         hevc.set_ltrUseFrames(1);
-                        hevc.ltrUseFrameBitmap = bitmap;
+                        hevc.ltrUseFrameBitmap = bitmap.0;
                     }
                 },
                 _ => {},

@@ -100,10 +100,13 @@ impl BufferFormat {
 }
 
 /// Bitmap of LTR frame indices to use as reference for an encoded frame.
-pub type LtrUseFrames = u32;
+#[derive(Debug, Clone)]
+pub struct LtrUseFrames(pub u32);
 
-pub fn ltr_use_frames(indices: &[u32]) -> LtrUseFrames {
-    indices.iter().map(|&i| 1u32 << i).sum()
+impl LtrUseFrames {
+    pub fn from_indices(indices: &[u32]) -> Self {
+        Self(indices.iter().map(|&i| 1u32 << i).sum())
+    }
 }
 
 /// Per-frame optional features for [`NvEncoder::encode_frame`].
