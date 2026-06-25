@@ -765,7 +765,6 @@ where
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn do_encode(
         &mut self,
         input_buffer: NV_ENC_INPUT_PTR,

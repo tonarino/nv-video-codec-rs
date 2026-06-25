@@ -99,7 +99,10 @@ impl BufferFormat {
     }
 }
 
-/// Bitmap of LTR frame indices to use as reference for an encoded frame.
+/// Bitmap of long-term reference (LTR) frame indices to use as reference for an encoded frame.
+///
+/// The provided indices need to have been already established by `EncodeFrameFeatures::ltr_mark_frame_idx()` on a prior frame
+/// and must still be in the encoder's reference picture buffer (i.e. not overwritten by a later mark or evicted).
 #[derive(Debug, Clone)]
 pub struct LtrUseFrames(pub u32);
 

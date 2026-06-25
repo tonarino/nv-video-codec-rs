@@ -114,7 +114,7 @@ pub struct EncodeRateControl {
     pub multi_pass: EncodeMultiPass,
 }
 
-/// Controls how LTR frames are marked.
+/// Controls how long-term reference (LTR) frames are marked.
 ///
 /// Per Picture (preferred) — client explicitly marks each LTR frame.
 /// Trust (may be deprecated) — encoder auto-marks the first `ltr_num_frames` frames after IDR.
