@@ -8,7 +8,7 @@ use nv_video_codec_sys::{
 
 pub use nv_video_codec_config::{
     EncodeMultiPass, EncodeQpMapMode, EncodeRateControl, EncodeRateControlMode, EncodeTuningInfo,
-    NvEncoderParams,
+    LtrTrustMode, NvEncoderParams,
 };
 
 ffi_enum! {
@@ -97,6 +97,31 @@ impl BufferFormat {
             _ => Err(NvEncError::InvalidParam.into()),
         }
     }
+}
+
+/// Bitmap of long-term reference (LTR) frame indices to use as reference for an encoded frame.
+///
+/// The provided indices need to have been already established by `EncodeFrameFeatures::ltr_mark_frame_idx()` on a prior frame
+/// and must still be in the encoder's reference picture buffer (i.e. not overwritten by a later mark or evicted).
+#[derive(Debug, Clone)]
+pub struct LtrUseFrames(pub u32);
+
+impl LtrUseFrames {
+    pub fn from_indices(indices: &[u32]) -> Self {
+        Self(indices.iter().map(|&i| 1u32 << i).sum())
+    }
+}
+
+/// Per-frame optional features for [`NvEncoder::encode_frame`].
+#[derive(Debug, Default, Clone)]
+pub struct EncodeFrameFeatures<'a> {
+    /// Per-block quality values. See [`EncodeQpMapMode`](nv_video_codec_config::EncodeQpMapMode).
+    /// Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
+    pub qp_delta_map: Option<&'a [i8]>,
+    /// LTR frame index to mark this frame as a long-term reference.
+    pub ltr_mark_frame_idx: Option<u32>,
+    /// Bitmap of LTR frame indices to use as reference for this frame.
+    pub ltr_use_frame_bitmap: Option<LtrUseFrames>,
 }
 
 bitflags! {
@@ -194,21 +219,31 @@ pub(crate) fn apply_params_to_encode_config(
     encode_config.rcParams.qpMapMode = params.qp_map_mode.into_ffi();
 
     match params.codec {
-        EncodeCodec::H264 =>
         // SAFETY: We checked the codec is H264, so we can access the union field.
-        unsafe {
-            encode_config
-                .encodeCodecConfig
-                .h264Config
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
+        EncodeCodec::H264 => unsafe {
+            let h264 = &mut encode_config.encodeCodecConfig.h264Config;
+            h264.set_repeatSPSPPS(params.repeat_spspps as u32);
+            if params.ltr_num_frames > 0 {
+                h264.set_enableLTR(1);
+                h264.ltrNumFrames = params.ltr_num_frames;
+                h264.ltrTrustMode = match params.ltr_trust_mode {
+                    LtrTrustMode::PerPicture => 0,
+                    LtrTrustMode::Trust => 1,
+                };
+            }
         },
-        EncodeCodec::Hevc =>
         // SAFETY: We checked the codec is HEVC, so we can access the union field.
-        unsafe {
-            encode_config
-                .encodeCodecConfig
-                .hevcConfig
-                .set_repeatSPSPPS(params.repeat_spspps as u32);
+        EncodeCodec::Hevc => unsafe {
+            let hevc = &mut encode_config.encodeCodecConfig.hevcConfig;
+            hevc.set_repeatSPSPPS(params.repeat_spspps as u32);
+            if params.ltr_num_frames > 0 {
+                hevc.set_enableLTR(1);
+                hevc.ltrNumFrames = params.ltr_num_frames;
+                hevc.ltrTrustMode = match params.ltr_trust_mode {
+                    LtrTrustMode::PerPicture => 0,
+                    LtrTrustMode::Trust => 1,
+                };
+            }
         },
     }
 }

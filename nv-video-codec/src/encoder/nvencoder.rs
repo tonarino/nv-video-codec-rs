@@ -6,12 +6,13 @@ use super::{
 };
 use crate::{
     encoder::{
-        apply_params_to_encode_config, defaults::CustomDefault, EncodePicFlags,
-        EncodeRateControlMode, IntoFfi as _, NvEncoderParams,
+        apply_params_to_encode_config, defaults::CustomDefault, EncodeFrameFeatures,
+        EncodePicFlags, EncodeRateControlMode, IntoFfi as _, NvEncoderParams,
     },
     guids::{EncodeCodec, IntoGuid as _},
 };
 use nv_video_codec_sys::{
+    guids::{NV_ENC_CODEC_H264_GUID, NV_ENC_CODEC_HEVC_GUID},
     NvEncodeAPICreateInstance, NvEncodeAPIGetMaxSupportedVersion, _NV_ENC_PIC_STRUCT,
     _NV_ENC_RECONFIGURE_PARAMS, GUID, NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
     NVENCAPI_VERSION, NVENC_INFINITE_GOPLENGTH, NV_ENCODE_API_FUNCTION_LIST, NV_ENC_BUFFER_USAGE,
@@ -231,9 +232,10 @@ where
         &mut self,
         packet: &mut Vec<&[u8]>,
         pic_flags: EncodePicFlags,
-        // Per-block quality values. See `EncodeQpMapMode` for interpretation.
-        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
-        qp_delta_map: Option<&[i8]>,
+        features: EncodeFrameFeatures<'_>,
+        // Opaque identifier for this frame, stored as `inputTimeStamp` in the NVENC pic params.
+        // Used by `invalidate_ref_frames` to identify which frame to drop on packet loss.
+        timestamp: u64,
     ) -> NvEncoderResult<()> {
         packet.clear();
         if !self.is_hw_encoder_initialized() {
@@ -247,7 +249,8 @@ where
             self.mapped_input_buffers[buffer_index as usize],
             self.bitstream_output_buffer[buffer_index as usize],
             pic_flags,
-            qp_delta_map,
+            features,
+            timestamp,
         );
 
         match encode_status {
@@ -767,9 +770,8 @@ where
         input_buffer: NV_ENC_INPUT_PTR,
         output_buffer: NV_ENC_OUTPUT_PTR,
         pic_flags: EncodePicFlags,
-        // Per-block quality values. See `EncodeQpMapMode` for interpretation.
-        // Flat `i8` array in raster order: one per 16×16 block (H.264) or 32×32 block (HEVC).
-        qp_delta_map: Option<&[i8]>,
+        features: EncodeFrameFeatures<'_>,
+        timestamp: u64,
     ) -> NvEncoderResult<()> {
         let mut pic_params = NV_ENC_PIC_PARAMS {
             version: NV_ENC_PIC_PARAMS_VER,
@@ -785,10 +787,40 @@ where
                 .get_completion_event((self.to_send as u32) % (self.encoder_buffer as u32))
                 as *mut _,
             encodePicFlags: pic_flags.bits(),
-            qpDeltaMap: qp_delta_map.map_or(std::ptr::null::<i8>(), |m| m.as_ptr()) as *mut _,
-            qpDeltaMapSize: qp_delta_map.map_or(0, |m| m.len() as u32),
+            inputTimeStamp: timestamp,
+            qpDeltaMap: features.qp_delta_map.map_or(std::ptr::null::<i8>(), |m| m.as_ptr())
+                as *mut _,
+            qpDeltaMapSize: features.qp_delta_map.map_or(0, |m| m.len() as u32),
             ..Default::default()
         };
+
+        if features.ltr_mark_frame_idx.is_some() || features.ltr_use_frame_bitmap.is_some() {
+            match self.initialize_params.encodeGUID {
+                g if g == NV_ENC_CODEC_H264_GUID => unsafe {
+                    let h264 = &mut pic_params.codecPicParams.h264PicParams;
+                    if let Some(idx) = features.ltr_mark_frame_idx {
+                        h264.set_ltrMarkFrame(1);
+                        h264.ltrMarkFrameIdx = idx;
+                    }
+                    if let Some(bitmap) = features.ltr_use_frame_bitmap {
+                        h264.set_ltrUseFrames(1);
+                        h264.ltrUseFrameBitmap = bitmap.0;
+                    }
+                },
+                g if g == NV_ENC_CODEC_HEVC_GUID => unsafe {
+                    let hevc = &mut pic_params.codecPicParams.hevcPicParams;
+                    if let Some(idx) = features.ltr_mark_frame_idx {
+                        hevc.set_ltrMarkFrame(1);
+                        hevc.ltrMarkFrameIdx = idx;
+                    }
+                    if let Some(bitmap) = features.ltr_use_frame_bitmap {
+                        hevc.set_ltrUseFrames(1);
+                        hevc.ltrUseFrameBitmap = bitmap.0;
+                    }
+                },
+                _ => {},
+            }
+        }
 
         unsafe {
             self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
@@ -879,6 +911,25 @@ where
             self.nv_encode_api_function_list.nvEncEncodePicture.unwrap()(
                 self.encoder_handle as *mut _,
                 &mut pic_params,
+            )
+            .into_nvenc_result()?;
+        }
+        Ok(())
+    }
+
+    /// Invalidate a corrupted reference frame and any dependent frames in the prediction chain.
+    ///
+    /// `timestamp` must match the `timestamp` value passed to `encode_frame` for the frame
+    /// that was lost. Typically called on sustained packet loss or decoder reinitialization,
+    /// not for isolated dropped packets.
+    pub fn invalidate_ref_frames(&mut self, timestamp: u64) -> NvEncoderResult<()> {
+        if self.encoder_handle.is_null() {
+            return Err(NvEncError::EncoderNotInitialized.into());
+        }
+        unsafe {
+            self.nv_encode_api_function_list.nvEncInvalidateRefFrames.unwrap()(
+                self.encoder_handle as *mut _,
+                timestamp,
             )
             .into_nvenc_result()?;
         }
