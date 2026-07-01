@@ -378,6 +378,19 @@ fn encode_ltr_round_trip() -> Result<()> {
     // Verify invalidate_ref_frames doesn't error.
     encoder.invalidate_ref_frames(0)?;
 
+    // Verify unmarked / out-of-range LTR indices are silently ignored.
+    upload_nv12_data_to_cuda_resource(data, encoder.get_next_input_resource(), w, h);
+    encoder.encode_frame(
+        &mut packet,
+        EncodePicFlags::empty(),
+        EncodeFrameFeatures {
+            ltr_use_frame_bitmap: Some(LtrUseFrames::from_indices(&[5, 3])),
+            ..Default::default()
+        },
+        6,
+    )?;
+    bitstream.extend(packet.iter().map(|p| p.to_vec()));
+
     encoder.end_encode(&mut packet)?;
     bitstream.extend(packet.iter().map(|p| p.to_vec()));
 
