@@ -230,7 +230,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 920]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -239,14 +239,14 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![5i8; 920]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[5i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![-5i8; 920]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[-5i8; 920]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -255,7 +255,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 100]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 100]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
@@ -264,7 +264,7 @@ fn encode_qp_map_delta_hevc() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 240]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 240]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
@@ -283,7 +283,7 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 49]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 49]), ..Default::default() },
         0,
     )?;
     assert_eq!(packet.len(), 1);
@@ -292,7 +292,7 @@ fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     let result = encoder.encode_frame(
         &mut packet,
         EncodePicFlags::empty(),
-        EncodeFrameFeatures { qp_delta_map: Some(&vec![0i8; 16]), ..Default::default() },
+        EncodeFrameFeatures { qp_delta_map: Some(&[0i8; 16]), ..Default::default() },
         0,
     );
     assert!(result.is_err());
