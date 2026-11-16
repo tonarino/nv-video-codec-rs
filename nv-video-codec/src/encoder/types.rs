@@ -3,7 +3,7 @@ use crate::guids::EncodeCodec;
 use ffi::_NV_ENC_BUFFER_FORMAT;
 use nv_video_codec_sys::{
     self as ffi, NV_ENC_CONFIG, NV_ENC_MULTI_PASS, NV_ENC_PARAMS_RC_MODE, NV_ENC_PIC_FLAGS,
-    NV_ENC_QP_MAP_MODE, NV_ENC_TUNING_INFO,
+    NV_ENC_QP, NV_ENC_QP_MAP_MODE, NV_ENC_TUNING_INFO,
 };
 
 pub use nv_video_codec_config::{
@@ -215,6 +215,10 @@ pub(crate) fn apply_params_to_encode_config(
         if params.rate_control.target_quality == 0 { params.rate_control.bit_rate } else { 0 };
     encode_config.rcParams.maxBitRate = params.rate_control.bit_rate;
     encode_config.rcParams.targetQuality = params.rate_control.target_quality;
+    let min_qp = params.rate_control.min_qp as u32;
+    encode_config.rcParams.set_enableMinQP((min_qp > 0) as u32);
+    encode_config.rcParams.minQP =
+        NV_ENC_QP { qpInterP: min_qp, qpInterB: min_qp, qpIntra: min_qp };
     encode_config.rcParams.vbvBufferSize = params.rate_control.vbv_buffer_size_bits;
     encode_config.rcParams.vbvInitialDelay = params.rate_control.vbv_buffer_initial_delay;
     encode_config.rcParams.set_enableAQ(params.rate_control.enable_aq as u32);

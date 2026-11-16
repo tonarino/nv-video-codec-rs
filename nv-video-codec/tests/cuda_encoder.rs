@@ -290,6 +290,19 @@ fn encode_vbr_target_quality_hevc() -> Result<()> {
 }
 
 #[test]
+fn encode_cbr_min_qp_hevc() -> Result<()> {
+    let mut encoder = util_init_encoder(1280, 720, BufferFormat::NV12)?;
+    let rate_control = EncodeRateControl { min_qp: 28, ..common_encoder_params().rate_control };
+    encoder.create_encoder(NvEncoderParams { rate_control, ..common_encoder_params() })?;
+
+    let mut packet = Vec::new();
+    encoder.encode_frame(&mut packet, EncodePicFlags::empty(), Default::default(), 0)?;
+    assert_eq!(packet.len(), 1);
+
+    Ok(())
+}
+
+#[test]
 fn encode_qp_map_delta_hevc_odd_resolution() -> Result<()> {
     let mut encoder = util_init_encoder(200, 200, BufferFormat::NV12)?;
     util_create_encoder_with(&mut encoder, EncodeCodec::Hevc, EncodeQpMapMode::Delta)?;

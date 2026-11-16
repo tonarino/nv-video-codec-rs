@@ -109,6 +109,7 @@ pub struct EncodeRateControl {
     pub low_delay_key_frame_scale: u8,
     pub bit_rate: u32,
     pub target_quality: u8,
+    pub min_qp: u8,
     pub vbv_buffer_size_bits: u32,
     pub vbv_buffer_initial_delay: u32,
     pub enable_aq: bool,
