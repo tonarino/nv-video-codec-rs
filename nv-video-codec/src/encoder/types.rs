@@ -212,6 +212,7 @@ pub(crate) fn apply_params_to_encode_config(
     encode_config.rcParams.lowDelayKeyFrameScale = params.rate_control.low_delay_key_frame_scale;
     encode_config.rcParams.averageBitRate = params.rate_control.bit_rate;
     encode_config.rcParams.maxBitRate = params.rate_control.bit_rate;
+    encode_config.rcParams.targetQuality = params.rate_control.target_quality;
     encode_config.rcParams.vbvBufferSize = params.rate_control.vbv_buffer_size_bits;
     encode_config.rcParams.vbvInitialDelay = params.rate_control.vbv_buffer_initial_delay;
     encode_config.rcParams.set_enableAQ(params.rate_control.enable_aq as u32);
