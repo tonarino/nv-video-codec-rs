@@ -210,7 +210,9 @@ pub(crate) fn apply_params_to_encode_config(
 ) {
     encode_config.rcParams.rateControlMode = params.rate_control.mode.into_ffi();
     encode_config.rcParams.lowDelayKeyFrameScale = params.rate_control.low_delay_key_frame_scale;
-    encode_config.rcParams.averageBitRate = params.rate_control.bit_rate;
+    // With a target quality there is no average to aim for so `bit_rate` is only the upper.
+    encode_config.rcParams.averageBitRate =
+        if params.rate_control.target_quality == 0 { params.rate_control.bit_rate } else { 0 };
     encode_config.rcParams.maxBitRate = params.rate_control.bit_rate;
     encode_config.rcParams.targetQuality = params.rate_control.target_quality;
     encode_config.rcParams.vbvBufferSize = params.rate_control.vbv_buffer_size_bits;

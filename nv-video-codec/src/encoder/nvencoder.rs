@@ -183,7 +183,8 @@ where
         self.initialize_params.frameRateNum = frame_rate_numerator;
         self.initialize_params.frameRateDen = frame_rate_denominator;
 
-        self.encode_config.rcParams.averageBitRate = bitrate;
+        self.encode_config.rcParams.averageBitRate =
+            if self.encode_config.rcParams.targetQuality == 0 { bitrate } else { 0 };
         self.encode_config.rcParams.maxBitRate = bitrate;
 
         let frame_rate = frame_rate_numerator as f64 / frame_rate_denominator as f64;
